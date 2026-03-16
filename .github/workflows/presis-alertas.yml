@@ -1,0 +1,45 @@
+name: Alertas Diarias Presis
+
+on:
+  schedule:
+    # Corre todos los días a las 8:00 AM UTC (5:00 AM Argentina)
+    - cron: '0 8 * * *'
+  workflow_dispatch: # Permite ejecutarlo manualmente desde GitHub
+
+jobs:
+  run-alert-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout del repositorio
+      uses: actions/checkout@v3
+
+    - name: Setup de Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Instalar dependencias
+      run: npm install
+
+    - name: Instalar navegadores para Playwright
+      run: npx playwright install --with-deps chromium
+
+    - name: Ejecutar Scraper Presis
+      run: |
+        npm install dotenv
+        node scraper.js
+      env:
+        # Credenciales de acceso a Epresis
+        PRESIS_USER: ${{ secrets.PRESIS_USER }}
+        PRESIS_PASS: ${{ secrets.PRESIS_PASS }}
+        PLAYWRIGHT_BROWSERS_PATH: 0
+
+    - name: Procesar Datos y Enviar Email
+      run: node parser.js
+      env:
+        SMTP_HOST: ${{ secrets.SMTP_HOST }}
+        SMTP_PORT: ${{ secrets.SMTP_PORT }}
+        SMTP_USER: ${{ secrets.SMTP_USER }}
+        SMTP_PASS: ${{ secrets.SMTP_PASS }}
+        REPORT_EMAILS: ${{ secrets.REPORT_EMAILS }}

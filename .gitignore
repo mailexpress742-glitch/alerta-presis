@@ -1,0 +1,5 @@
+node_modules/
+.env
+debug_*
+export.csv
+reporte.html
