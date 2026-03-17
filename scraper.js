@@ -138,4 +138,7 @@ async function scrapePresis() {
 
 }
 
-scrapePresis().catch(console.error);
+scrapePresis().catch(err => {
+    console.error("ERROR FATAL EN EL SCRAPER:", err);
+    process.exit(1);
+});

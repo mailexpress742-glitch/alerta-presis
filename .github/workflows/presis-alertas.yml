@@ -43,3 +43,14 @@ jobs:
         SMTP_USER: ${{ secrets.SMTP_USER }}
         SMTP_PASS: ${{ secrets.SMTP_PASS }}
         REPORT_EMAILS: ${{ secrets.REPORT_EMAILS }}
+
+    - name: Subir Archivos de Debug y CSV
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: debug-files
+        path: |
+          *.png
+          *.html
+          export.csv
+          debug_botones_exportar.json
