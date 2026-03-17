@@ -102,22 +102,36 @@ async function scrapePresis() {
       });
       fs.writeFileSync('debug_botones_exportar.json', JSON.stringify(botonesExportar, null, 2));
 
-      console.log("Haciendo clic en Exportar CSV con evaluate...");
-      try {
-          const downloadPromise = page.waitForEvent('download', { timeout: 90000 });
-          await page.evaluate(() => {
-              // Buscamos cualquier boton que diga CSV
-              const els = Array.from(document.querySelectorAll('a, button'));
-              const btn = els.find(e => e.innerText && e.innerText.includes('CSV'));
-              if (btn) btn.click();
-          });
-      const download = await downloadPromise;
-      const downloadPath = path.join(__dirname, 'export.csv');
-      await download.saveAs(downloadPath);
-      console.log(`CSV Exportado exitosamente en: ${downloadPath}`);
-  } catch (err) {
-      console.log("No se pudo exportar CSV", err.message);
-  }
+       console.log("Haciendo clic en Exportar CSV con evaluate...");
+       try {
+           const downloadPromise = page.waitForEvent('download', { timeout: 120000 }); // Más tiempo por las dudas
+           await page.evaluate(() => {
+               const els = Array.from(document.querySelectorAll('a, button'));
+               const csvButtons = els.filter(e => e.innerText && (e.innerText.includes('CSV') || e.innerText.includes('Exportar')));
+               console.log(`Se encontraron ${csvButtons.length} botones con texto 'CSV' o 'Exportar'.`);
+               const btn = csvButtons[0]; // Tomar el primer botón encontrado
+               if (btn) {
+                   console.log("Botón de exportación encontrado y clickeado");
+                   btn.click();
+               } else {
+                   throw new Error("No se encontró ningún botón que diga CSV o Exportar");
+               }
+           });
+           
+           const download = await downloadPromise;
+           const downloadPath = path.join(__dirname, 'export.csv');
+           await download.saveAs(downloadPath);
+           
+           if (fs.existsSync(downloadPath)) {
+               const stats = fs.statSync(downloadPath);
+               console.log(`CSV Exportado exitosamente en: ${downloadPath} (Tamaño: ${stats.size} bytes)`);
+           } else {
+               throw new Error("El archivo no se guardó después de la descarga");
+           }
+       } catch (err) {
+           console.error("CRITICAL ERROR: No se pudo exportar CSV -", err.message);
+           process.exit(1); // Forzar que GitHub Actions marque este paso como FALLIDO
+       }
 
   await browser.close();
 
