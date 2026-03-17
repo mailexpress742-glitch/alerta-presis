@@ -33,7 +33,6 @@ jobs:
         # Credenciales de acceso a Epresis
         PRESIS_USER: ${{ secrets.PRESIS_USER }}
         PRESIS_PASS: ${{ secrets.PRESIS_PASS }}
-        PLAYWRIGHT_BROWSERS_PATH: 0
 
     - name: Procesar Datos y Enviar Email
       run: node parser.js
