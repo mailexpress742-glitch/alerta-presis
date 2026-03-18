@@ -2,8 +2,8 @@ name: Alertas Diarias Presis
 
 on:
   schedule:
-    # Corre todos los días a las 8:00 AM UTC (5:00 AM Argentina)
-    - cron: '0 12 * * *'
+    # Corre todos los días a las 10:00 AM UTC (7:00 AM Argentina)
+    - cron: '0 10 * * *'
   workflow_dispatch: # Permite ejecutarlo manualmente desde GitHub
 
 jobs:
