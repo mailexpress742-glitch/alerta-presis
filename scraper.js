@@ -98,36 +98,38 @@ async function scrapePresis() {
   
   console.log("Intentando Exportar CSV...");
   try {
-      // Extraemos los datos del formulario directamente utilizando FormData del navegador
-      const formData = await page.evaluate(() => {
-          const form = document.getElementById('formulario');
-          if (!form) throw new Error('No se encontró el formulario #formulario');
-          const fd = new FormData(form);
-          const params = {};
-          for (const [key, value] of fd.entries()) {
-              if (params[key] !== undefined) {
-                  if (!Array.isArray(params[key])) {
-                      params[key] = [params[key]];
-                  }
-                  params[key].push(value);
-              } else {
-                  params[key] = value;
-              }
-          }
-          return params;
+      // Obtenemos la serialización exacta del formulario usando el jQuery de la propia página
+      const postData = await page.evaluate(() => {
+          // Eliminamos el input type anterior si existiese
+          const oldType = document.getElementById('type_export');
+          if (oldType) oldType.remove();
+
+          // Creamos y agregamos el input de tipo csv como lo hace exportFilter
+          const frm = document.getElementById('formulario');
+          if (!frm) throw new Error('No se encontró el formulario #formulario');
+
+          const input = document.createElement('input');
+          input.name = 'type';
+          input.type = 'hidden';
+          input.value = 'csv';
+          input.id = 'type_export';
+          frm.appendChild(input);
+
+          // Serializamos usando jQuery para garantizar compatibilidad al 100%
+          return $('#formulario').serialize();
       });
 
-      if (!formData) {
-          throw new Error("No se pudo extraer la información del formulario.");
+      if (!postData) {
+          throw new Error("No se pudo serializar el formulario.");
       }
 
-      formData['type'] = 'csv';
-      console.log("Datos del formulario extraídos. Realizando POST directo para exportar...");
+      console.log("Formulario serializado correctamente. Enviando POST directo...");
 
-      // Hacemos el POST directo usando el request helper de Playwright que comparte la sesión
+      // Hacemos el POST directo usando el request helper de Playwright con el payload serializado
       const response = await page.request.post('https://mexlv.epresis.com/guias/exportarExcel', {
-          form: formData,
+          data: postData,
           headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
               'Referer': page.url()
           },
           timeout: 120000
