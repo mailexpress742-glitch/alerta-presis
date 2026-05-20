@@ -36,23 +36,15 @@ async function scrapePresis() {
   }
 
   console.log("Esperando que cargue la página interna...");
-  await page.waitForTimeout(5000); 
-
-  // Capturamos el HTML para debug
-  const html = await page.content();
-  fs.writeFileSync('debug_listado.html', html);
-  await page.screenshot({ path: 'debug_01_loaded.png', fullPage: true });
-
+  await page.waitForSelector('#formulario', { timeout: 60000 });
+  
+  // Esperar a que el modal inicial "Cargando" esté oculto
+  try {
+      await page.waitForSelector('#pleaseWaitDialog', { state: 'hidden', timeout: 30000 });
+  } catch (e) {}
+  
   console.log("Aplicando filtros...");
   try {
-      // Intentamos con varios selectores para el botón de buscar
-      const buscarBtn = page.locator('.btn-buscar, button:has-text("Buscar"), a:has-text("Buscar")').first();
-      await buscarBtn.waitFor({ state: 'attached', timeout: 45000 });
-      
-      // Esperar que el modal inicial desaparezca
-      await page.waitForSelector('#pleaseWaitDialog', { state: 'hidden', timeout: 30000 }).catch(() => {});
-
-      console.log("Llenando fecha_pactada...");
       const fechaLocator = page.locator('input[name="fecha_pactada"]');
       
       const formatLoc = (d) => {
@@ -73,29 +65,48 @@ async function scrapePresis() {
 
       await fechaLocator.waitFor({ state: 'visible' });
       await fechaLocator.click();
+      
+      // Limpiamos el input primero por si tiene texto preexistente
+      await page.keyboard.press('Control+A');
+      await page.keyboard.press('Backspace');
+      
       await page.keyboard.type(dateRangeStr);
       await page.keyboard.press('Enter');
-      
-      await page.screenshot({ path: 'debug_01b_after_fill.png', fullPage: true });
-
-      console.log("Haciendo clic en Buscar...");
-      await buscarBtn.click();
-      
-      console.log("Esperando carga de datos...");
-      await page.waitForTimeout(2000); 
-      await page.waitForSelector('#pleaseWaitDialog', { state: 'hidden', timeout: 60000 }).catch(() => {});
-      await page.waitForFunction(() => !document.body.innerText.includes('Cargando, espere por favor'), { timeout: 60000 }).catch(() => {});
-      
-      await page.screenshot({ path: 'debug_02_after_buscar_final.png', fullPage: true });
-  } catch (e) {
-      console.error("ERROR EN BUSQUEDA:", e.message);
-      await page.screenshot({ path: 'debug_error_busqueda.png', fullPage: true });
-      throw e;
+  } catch (err) {
+      console.error("ERROR FILTROS:", err.message);
+      await page.screenshot({ path: 'debug_error_filtros.png', fullPage: true });
+      process.exit(1);
   }
-
-  const finalHtml = await page.content();
-  fs.writeFileSync('debug_listado_final.html', finalHtml);
   
+  await page.screenshot({ path: 'debug_01b_after_fill.png', fullPage: true });
+
+  console.log("Haciendo clic en Buscar...");
+  try {
+      // Nos aseguramos de que el modal de carga esté completamente oculto antes de hacer clic en Buscar
+      try {
+          await page.waitForSelector('#pleaseWaitDialog', { state: 'hidden', timeout: 30000 });
+      } catch (e) {}
+
+      const searchBtn = page.locator('.btn-buscar, button:has-text("Buscar"), a:has-text("Buscar")').first();
+      await searchBtn.click();
+  } catch (err) {
+      console.error("ERROR EN BUSQUEDA:", err.message);
+      await page.screenshot({ path: 'debug_error_buscar.png', fullPage: true });
+      process.exit(1);
+  }
+  
+  console.log("Esperando carga de datos...");
+  try {
+      // Esperamos a que el diálogo de carga esté oculto/desaparezca después de la búsqueda
+      await page.waitForTimeout(1000);
+      await page.waitForSelector('#pleaseWaitDialog', { state: 'hidden', timeout: 60000 });
+  } catch (err) {
+      console.log("Advertencia: No se detectó o no desapareció el overlay de carga, continuando...");
+  }
+  
+  await page.screenshot({ path: 'debug_02_after_buscar_final.png', fullPage: true });
+  fs.writeFileSync(path.join(__dirname, 'debug_listado_final.html'), await page.content());
+
   console.log("Intentando Exportar CSV...");
   try {
       // Obtenemos la serialización exacta del formulario usando el jQuery de la propia página
