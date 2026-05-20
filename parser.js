@@ -66,8 +66,9 @@ async function procesarAlertas() {
         datePactada.setHours(0, 0, 0, 0);
 
         // --- FILTRO DE MES ---
-        if (datePactada.getFullYear() < 2026) return;
-        if (datePactada.getFullYear() === 2026 && datePactada.getMonth() < hoy.getMonth()) return;
+        // Permitimos el mes actual y el anterior para capturar las vencidas dentro del rango de búsqueda de 30 días
+        const limiteInferior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+        if (datePactada < limiteInferior) return;
 
         const utcHoy = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
         const utcPactada = Date.UTC(datePactada.getFullYear(), datePactada.getMonth(), datePactada.getDate());
@@ -118,10 +119,13 @@ async function procesarAlertas() {
     console.log(`Resumen Final - HOY (${hoyStr}): ${hoyCount}, CRITICOS TOTAL: ${criticos.length}, ADVERTENCIAS: ${advertencias.length}, PROXIMOS: ${proximos.length}`);
     console.log("Primeros Criticos (ordenados):", criticos.slice(0, 5).map(a => `${a.guia}: ${a.fechaPactada}`));
 
+    const nombresMeses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    const nombreMesActual = nombresMeses[hoy.getMonth()];
+
     let emailHtml = `
       <div style="font-family:Arial,sans-serif;color:#333;max-width:800px;margin:0 auto">
         <h2>Reporte Diario Presis (${new Date().toLocaleDateString()})</h2>
-        <p>Categorización de guías por Fecha Pactada (Solo mes de Marzo):</p>
+        <p>Categorización de guías por Fecha Pactada (Mes de ${nombreMesActual} y pendientes del mes anterior):</p>
     `;
     
     const renderTable = (lista, tituloHtml, color, limite = 30) => {
@@ -157,7 +161,7 @@ async function procesarAlertas() {
     };
 
     emailHtml += renderTable(criticos, '🔴 CRÍTICO (HOY o VENCIDAS)', '#d32f2f');
-    emailHtml += renderTable(advertencias, '🟠 PRÓXIMAS 48 HORAS', '#f57f17');
+    emailHtml += renderTable(advertencias, '🟡 PRÓXIMAS 48 HORAS', '#f57f17');
     emailHtml += renderTable(proximos, '🟢 PRÓXIMA SEMANA', '#388e3c');
     emailHtml += `</div>`;
 

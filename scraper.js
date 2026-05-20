@@ -113,6 +113,7 @@ async function scrapePresis() {
   console.log("Configurando interceptación de la descarga...");
   await context.route('**/exportarExcel', async (route) => {
       console.log("¡Request de exportación detectado por el interceptor!");
+
       try {
           const response = await route.fetch();
           csvBuffer = await response.body();
