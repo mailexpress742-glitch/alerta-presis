@@ -64,14 +64,18 @@ async function scrapePresis() {
       console.log(`Rango: ${dateRangeStr}`);
 
       await fechaLocator.waitFor({ state: 'visible' });
-      await fechaLocator.click();
-      
-      // Limpiamos el input primero por si tiene texto preexistente
-      await page.keyboard.press('Control+A');
-      await page.keyboard.press('Backspace');
-      
-      await page.keyboard.type(dateRangeStr);
-      await page.keyboard.press('Enter');
+      console.log("Setting date range directly via DOM evaluate...");
+      await page.evaluate(({ val }) => {
+          const el = document.getElementById('fecha_pactada');
+          if (el) {
+              el.value = val;
+              if (window.$) {
+                  $(el).val(val).trigger('change');
+              } else {
+                  el.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+          }
+      }, { val: dateRangeStr });
   } catch (err) {
       console.error("ERROR FILTROS:", err.message);
       await page.screenshot({ path: 'debug_error_filtros.png', fullPage: true });
