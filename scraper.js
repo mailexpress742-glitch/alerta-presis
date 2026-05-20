@@ -108,55 +108,50 @@ async function scrapePresis() {
   fs.writeFileSync(path.join(__dirname, 'debug_listado_final.html'), await page.content());
 
   console.log("Intentando Exportar CSV...");
+  let csvBuffer = null;
+  
+  console.log("Configurando interceptación de la descarga...");
+  await context.route('**/exportarExcel', async (route) => {
+      console.log("¡Request de exportación detectado por el interceptor!");
+      try {
+          const response = await route.fetch();
+          csvBuffer = await response.body();
+          console.log(`Descarga interceptada con éxito: ${csvBuffer.length} bytes`);
+          await route.fulfill({
+              status: 200,
+              contentType: 'text/csv',
+              body: csvBuffer
+          });
+      } catch (err) {
+          console.error("Error al interceptar descarga en la ruta:", err.message);
+          await route.abort();
+      }
+  });
+
   try {
-      // Obtenemos la serialización exacta del formulario usando el jQuery de la propia página
-      const postData = await page.evaluate(() => {
-          // Eliminamos el input type anterior si existiese
-          const oldType = document.getElementById('type_export');
-          if (oldType) oldType.remove();
-
-          // Creamos y agregamos el input de tipo csv como lo hace exportFilter
-          const frm = document.getElementById('formulario');
-          if (!frm) throw new Error('No se encontró el formulario #formulario');
-
-          const input = document.createElement('input');
-          input.name = 'type';
-          input.type = 'hidden';
-          input.value = 'csv';
-          input.id = 'type_export';
-          frm.appendChild(input);
-
-          // Serializamos usando jQuery para garantizar compatibilidad al 100%
-          return $('#formulario').serialize();
+      // Hacemos clic en el botón Exportar CSV nativo de la página
+      await page.evaluate(() => {
+          const els = Array.from(document.querySelectorAll('a, button'));
+          const btn = els.find(e => e.innerText && (e.innerText.includes('CSV') || e.innerText.includes('Exportar')));
+          if (btn) btn.click();
+          else throw new Error("No se encontró botón CSV/Exportar");
       });
-
-      if (!postData) {
-          throw new Error("No se pudo serializar el formulario.");
+      
+      console.log("Esperando a que el interceptor capture el archivo...");
+      let elapsed = 0;
+      while (!csvBuffer && elapsed < 120000) {
+          await page.waitForTimeout(1000);
+          elapsed += 1000;
       }
-
-      console.log("Formulario serializado correctamente. Enviando POST directo...");
-
-      // Hacemos el POST directo usando el request helper de Playwright con el payload serializado
-      const response = await page.request.post('https://mexlv.epresis.com/guias/exportarExcel', {
-          data: postData,
-          headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'Referer': page.url()
-          },
-          timeout: 120000
-      });
-
-      if (!response.ok()) {
-          throw new Error(`El servidor devolvió HTTP ${response.status()}: ${response.statusText()}`);
+      
+      if (!csvBuffer) {
+          throw new Error("No se interceptó la descarga del CSV tras 120 segundos.");
       }
-
-      const buffer = await response.body();
+      
       const downloadPath = require('path').join(__dirname, 'export.csv');
-      fs.writeFileSync(downloadPath, buffer);
-
-      if (fs.existsSync(downloadPath)) {
-          console.log(`CSV Guardado: ${fs.statSync(downloadPath).size} bytes`);
-      }
+      fs.writeFileSync(downloadPath, csvBuffer);
+      console.log(`CSV Guardado: ${fs.statSync(downloadPath).size} bytes`);
+      
       await page.screenshot({ path: 'debug_03_export_ok.png', fullPage: true });
   } catch (err) {
       console.error("ERROR EXPORTACIÓN:", err.message);
