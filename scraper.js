@@ -98,7 +98,7 @@ async function scrapePresis() {
   
   console.log("Intentando Exportar CSV...");
   try {
-      const downloadPromise = page.waitForEvent('download', { timeout: 120000 });
+      const downloadPromise = context.waitForEvent('download', { timeout: 120000 });
       await page.evaluate(() => {
           const els = Array.from(document.querySelectorAll('a, button'));
           const btn = els.find(e => e.innerText && (e.innerText.includes('CSV') || e.innerText.includes('Exportar')));
