@@ -98,21 +98,53 @@ async function scrapePresis() {
   
   console.log("Intentando Exportar CSV...");
   try {
-      const downloadPromise = context.waitForEvent('download', { timeout: 120000 });
-      await page.evaluate(() => {
-          const els = Array.from(document.querySelectorAll('a, button'));
-          const btn = els.find(e => e.innerText && (e.innerText.includes('CSV') || e.innerText.includes('Exportar')));
-          if (btn) btn.click();
-          else throw new Error("No se encontró botón CSV/Exportar");
+      // Extraemos los datos del formulario directamente utilizando FormData del navegador
+      const formData = await page.evaluate(() => {
+          const form = document.getElementById('formulario');
+          if (!form) throw new Error('No se encontró el formulario #formulario');
+          const fd = new FormData(form);
+          const params = {};
+          for (const [key, value] of fd.entries()) {
+              if (params[key] !== undefined) {
+                  if (!Array.isArray(params[key])) {
+                      params[key] = [params[key]];
+                  }
+                  params[key].push(value);
+              } else {
+                  params[key] = value;
+              }
+          }
+          return params;
       });
-      
-      const download = await downloadPromise;
-      const downloadPath = path.join(__dirname, 'export.csv');
-      await download.saveAs(downloadPath);
-      
+
+      if (!formData) {
+          throw new Error("No se pudo extraer la información del formulario.");
+      }
+
+      formData['type'] = 'csv';
+      console.log("Datos del formulario extraídos. Realizando POST directo para exportar...");
+
+      // Hacemos el POST directo usando el request helper de Playwright que comparte la sesión
+      const response = await page.request.post('https://mexlv.epresis.com/guias/exportarExcel', {
+          form: formData,
+          headers: {
+              'Referer': page.url()
+          },
+          timeout: 120000
+      });
+
+      if (!response.ok()) {
+          throw new Error(`El servidor devolvió HTTP ${response.status()}: ${response.statusText()}`);
+      }
+
+      const buffer = await response.body();
+      const downloadPath = require('path').join(__dirname, 'export.csv');
+      fs.writeFileSync(downloadPath, buffer);
+
       if (fs.existsSync(downloadPath)) {
           console.log(`CSV Guardado: ${fs.statSync(downloadPath).size} bytes`);
       }
+      await page.screenshot({ path: 'debug_03_export_ok.png', fullPage: true });
   } catch (err) {
       console.error("ERROR EXPORTACIÓN:", err.message);
       await page.screenshot({ path: 'debug_error_exportacion.png', fullPage: true });
