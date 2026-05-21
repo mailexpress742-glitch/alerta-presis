@@ -67,32 +67,52 @@ async function scrapePresis() {
 
       await fechaLocator.waitFor({ state: 'visible' });
       console.log("Setting date range directly via DOM evaluate and daterangepicker API...");
-      await page.evaluate(({ val, start, end }) => {
-          const el = window.$ ? $('#fecha_pactada') : null;
-          if (el && el.length) {
-              const picker = el.data('daterangepicker');
+      const debugLog = await page.evaluate(({ val, start, end }) => {
+          const logs = [];
+          logs.push(`window.$ defined: ${typeof window.$}`);
+          logs.push(`window.jQuery defined: ${typeof window.jQuery}`);
+          
+          const jqEl = window.$ ? window.$('#fecha_pactada') : (window.jQuery ? window.jQuery('#fecha_pactada') : null);
+          logs.push(`jqEl found: ${jqEl && jqEl.length}`);
+          
+          if (jqEl && jqEl.length) {
+              const picker = jqEl.data('daterangepicker');
+              logs.push(`picker found: ${!!picker}`);
               if (picker) {
-                  const m = window.moment || window.Moment || moment;
-                  if (typeof m === 'function') {
-                      picker.setStartDate(m(start, 'DD/MM/YYYY'));
-                      picker.setEndDate(m(end, 'DD/MM/YYYY'));
-                  } else {
-                      picker.setStartDate(start);
-                      picker.setEndDate(end);
+                  try {
+                      const m = window.moment || window.Moment || (typeof moment !== 'undefined' ? moment : null);
+                      logs.push(`moment defined: ${typeof m}`);
+                      if (typeof m === 'function') {
+                          picker.setStartDate(m(start, 'DD/MM/YYYY'));
+                          picker.setEndDate(m(end, 'DD/MM/YYYY'));
+                          logs.push('setStartDate/setEndDate called with moment');
+                      } else {
+                          picker.setStartDate(start);
+                          picker.setEndDate(end);
+                          logs.push('setStartDate/setEndDate called with string');
+                      }
+                      jqEl.trigger('apply.daterangepicker', picker);
+                      jqEl.trigger('change');
+                      logs.push('apply.daterangepicker and change triggered');
+                  } catch (e) {
+                      logs.push(`Error setting picker: ${e.message}`);
                   }
-                  el.trigger('apply.daterangepicker', picker);
-                  el.trigger('change');
               } else {
-                  el.val(val).trigger('change');
+                  jqEl.val(val).trigger('change');
+                  logs.push('val and change triggered (no picker)');
               }
           } else {
               const domEl = document.getElementById('fecha_pactada');
+              logs.push(`domEl found: ${!!domEl}`);
               if (domEl) {
                   domEl.value = val;
                   domEl.dispatchEvent(new Event('change', { bubbles: true }));
+                  logs.push('domEl value set and change event dispatched');
               }
           }
+          return logs;
       }, { val: dateRangeStr, start: startLoc, end: endLoc });
+      console.log("EVALUATE LOGS:", debugLog);
   } catch (err) {
       console.error("ERROR FILTROS:", err.message);
       await page.screenshot({ path: 'debug_error_filtros.png', fullPage: true });
