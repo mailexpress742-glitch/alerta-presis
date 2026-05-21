@@ -11,7 +11,6 @@ async function scrapePresis() {
   console.log("Navegando al login...");
   await page.goto('https://mexlv.epresis.com/login');
   
-  // Login usando variables de entorno o credenciales por defecto
   const user = process.env.PRESIS_USER || 'airisarri';
   const pass = process.env.PRESIS_PASS || 'Airisarri2026.';
   
@@ -27,18 +26,16 @@ async function scrapePresis() {
   console.log("Navegando a listado de multiitems...");
   await page.goto('https://mexlv.epresis.com/guias/multiitems/listado', { waitUntil: 'networkidle', timeout: 60000 });
   
-  // VALIDACIÓN CRÍTICA: ¿Nos mandaron de vuelta al login?
   const currentUrl = page.url();
   console.log(`URL actual: ${currentUrl}`);
   if (currentUrl.includes('/login')) {
       await page.screenshot({ path: 'debug_01_login_failed.png', fullPage: true });
-      throw new Error("LOGIN FALLIDO: El sistema redirigió de vuelta al login. Verifica el usuario/clave en GitHub Secrets.");
+      throw new Error("LOGIN FALLIDO: El sistema redirigi de vuelta al login. Verifica el usuario/clave en GitHub Secrets.");
   }
 
-  console.log("Esperando que cargue la página interna...");
+  console.log("Esperando que cargue la pogina interna...");
   await page.waitForSelector('#formulario', { timeout: 60000 });
   
-  // Esperar a que el modal inicial "Cargando" esté oculto
   try {
       await page.waitForSelector('#pleaseWaitDialog', { state: 'hidden', timeout: 30000 });
   } catch (e) {}
@@ -63,56 +60,46 @@ async function scrapePresis() {
       const startLoc = formatLoc(hace30Dias);
       const endLoc = formatLoc(en30Dias);
       const dateRangeStr = `${startLoc} - ${endLoc}`;
-      console.log(`Rango: ${dateRangeStr}`);
+      console.log(`Rango a establecer: ${dateRangeStr}`);
 
       await fechaLocator.waitFor({ state: 'visible' });
-      console.log("Setting date range directly via DOM evaluate and daterangepicker API...");
-      const debugLog = await page.evaluate(({ val, start, end }) => {
-          const logs = [];
-          logs.push(`window.$ defined: ${typeof window.$}`);
-          logs.push(`window.jQuery defined: ${typeof window.jQuery}`);
-          
-          const jqEl = window.$ ? window.$('#fecha_pactada') : (window.jQuery ? window.jQuery('#fecha_pactada') : null);
-          logs.push(`jqEl found: ${jqEl && jqEl.length}`);
-          
-          if (jqEl && jqEl.length) {
-              const picker = jqEl.data('daterangepicker');
-              logs.push(`picker found: ${!!picker}`);
-              if (picker) {
-                  try {
-                      const m = window.moment || window.Moment || (typeof moment !== 'undefined' ? moment : null);
-                      logs.push(`moment defined: ${typeof m}`);
-                      if (typeof m === 'function') {
-                          picker.setStartDate(m(start, 'DD/MM/YYYY'));
-                          picker.setEndDate(m(end, 'DD/MM/YYYY'));
-                          logs.push('setStartDate/setEndDate called with moment');
-                      } else {
-                          picker.setStartDate(start);
-                          picker.setEndDate(end);
-                          logs.push('setStartDate/setEndDate called with string');
-                      }
-                      jqEl.trigger('apply.daterangepicker', picker);
-                      jqEl.trigger('change');
-                      logs.push('apply.daterangepicker and change triggered');
-                  } catch (e) {
-                      logs.push(`Error setting picker: ${e.message}`);
-                  }
+      
+      // Seteo inicial y log inmediato
+      const log1 = await page.evaluate(({ val, start, end }) => {
+          const el = $('#fecha_pactada');
+          const picker = el.data('daterangepicker');
+          if (picker) {
+              const m = window.moment || window.Moment || (typeof moment !== 'undefined' ? moment : null);
+              if (typeof m === 'function') {
+                  picker.setStartDate(m(start, 'DD/MM/YYYY'));
+                  picker.setEndDate(m(end, 'DD/MM/YYYY'));
               } else {
-                  jqEl.val(val).trigger('change');
-                  logs.push('val and change triggered (no picker)');
+                  picker.setStartDate(start);
+                  picker.setEndDate(end);
               }
+              el.trigger('apply.daterangepicker', picker);
+              el.trigger('change');
           } else {
-              const domEl = document.getElementById('fecha_pactada');
-              logs.push(`domEl found: ${!!domEl}`);
-              if (domEl) {
-                  domEl.value = val;
-                  domEl.dispatchEvent(new Event('change', { bubbles: true }));
-                  logs.push('domEl value set and change event dispatched');
-              }
+              el.val(val).trigger('change');
           }
-          return logs;
+          return {
+              val: el.val(),
+              serialize: $('#formulario').serializeArray().find(d => d.name === 'fecha_pactada')
+          };
       }, { val: dateRangeStr, start: startLoc, end: endLoc });
-      console.log("EVALUATE LOGS:", debugLog);
+      console.log("LOG 1 (inmediato):", log1);
+
+      await page.waitForTimeout(1000);
+
+      const log2 = await page.evaluate(() => {
+          const el = $('#fecha_pactada');
+          return {
+              val: el.val(),
+              serialize: $('#formulario').serializeArray().find(d => d.name === 'fecha_pactada')
+          };
+      });
+      console.log("LOG 2 (despu�s de 1s):", log2);
+
   } catch (err) {
       console.error("ERROR FILTROS:", err.message);
       await page.screenshot({ path: 'debug_error_filtros.png', fullPage: true });
@@ -123,12 +110,21 @@ async function scrapePresis() {
 
   console.log("Haciendo clic en Buscar...");
   try {
-      // Nos aseguramos de que el modal de carga esté completamente oculto antes de hacer clic en Buscar
       try {
           await page.waitForSelector('#pleaseWaitDialog', { state: 'hidden', timeout: 30000 });
       } catch (e) {}
 
       const searchBtn = page.locator('.btn-buscar, button:has-text("Buscar"), a:has-text("Buscar")').first();
+      
+      const log3 = await page.evaluate(() => {
+          const el = $('#fecha_pactada');
+          return {
+              val: el.val(),
+              serialize: $('#formulario').serializeArray().find(d => d.name === 'fecha_pactada')
+          };
+      });
+      console.log("LOG 3 (antes de click Buscar):", log3);
+
       await searchBtn.click();
   } catch (err) {
       console.error("ERROR EN BUSQUEDA:", err.message);
@@ -138,12 +134,18 @@ async function scrapePresis() {
   
   console.log("Esperando carga de datos...");
   try {
-      // Esperamos a que el diálogo de carga esté oculto/desaparezca después de la búsqueda
       await page.waitForTimeout(1000);
       await page.waitForSelector('#pleaseWaitDialog', { state: 'hidden', timeout: 60000 });
-  } catch (err) {
-      console.log("Advertencia: No se detectó o no desapareció el overlay de carga, continuando...");
-  }
+  } catch (err) {}
+  
+  const log4 = await page.evaluate(() => {
+      const el = $('#fecha_pactada');
+      return {
+          val: el.val(),
+          serialize: $('#formulario').serializeArray().find(d => d.name === 'fecha_pactada')
+      };
+  });
+  console.log("LOG 4 (despu�s de Buscar completado):", log4);
   
   await page.screenshot({ path: 'debug_02_after_buscar_final.png', fullPage: true });
   fs.writeFileSync(path.join(__dirname, 'debug_listado_final.html'), await page.content());
@@ -151,14 +153,15 @@ async function scrapePresis() {
   console.log("Intentando Exportar CSV...");
   let csvBuffer = null;
   
-  console.log("Configurando interceptación de la descarga...");
+  console.log("Configurando interceptaci�n de la descarga...");
   await context.route('**/exportarExcel', async (route) => {
-      console.log("¡Request de exportación detectado por el interceptor!");
+      console.log("�Request de exportaci�n detectado por el interceptor!");
+      console.log("POST Body:", route.request().postData());
 
       try {
           const response = await route.fetch();
           csvBuffer = await response.body();
-          console.log(`Descarga interceptada con éxito: ${csvBuffer.length} bytes`);
+          console.log(`Descarga interceptada con �xito: ${csvBuffer.length} bytes`);
           await route.fulfill({
               status: 200,
               contentType: 'text/csv',
@@ -171,12 +174,11 @@ async function scrapePresis() {
   });
 
   try {
-      // Hacemos clic en el botón Exportar CSV nativo de la página
       await page.evaluate(() => {
           const els = Array.from(document.querySelectorAll('a, button'));
           const btn = els.find(e => e.innerText && (e.innerText.includes('CSV') || e.innerText.includes('Exportar')));
           if (btn) btn.click();
-          else throw new Error("No se encontró botón CSV/Exportar");
+          else throw new Error("No se encontr� bot�n CSV/Exportar");
       });
       
       console.log("Esperando a que el interceptor capture el archivo...");
@@ -187,7 +189,7 @@ async function scrapePresis() {
       }
       
       if (!csvBuffer) {
-          throw new Error("No se interceptó la descarga del CSV tras 120 segundos.");
+          throw new Error("No se intercept� la descarga del CSV tras 120 segundos.");
       }
       
       const downloadPath = require('path').join(__dirname, 'export.csv');
@@ -196,7 +198,7 @@ async function scrapePresis() {
       
       await page.screenshot({ path: 'debug_03_export_ok.png', fullPage: true });
   } catch (err) {
-      console.error("ERROR EXPORTACIÓN:", err.message);
+      console.error("ERROR EXPORTACI�N:", err.message);
       await page.screenshot({ path: 'debug_error_exportacion.png', fullPage: true });
       process.exit(1);
   }
