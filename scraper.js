@@ -60,22 +60,39 @@ async function scrapePresis() {
       const en30Dias = new Date(hoy);
       en30Dias.setDate(hoy.getDate() + 30);
       
-      const dateRangeStr = `${formatLoc(hace30Dias)} - ${formatLoc(en30Dias)}`;
+      const startLoc = formatLoc(hace30Dias);
+      const endLoc = formatLoc(en30Dias);
+      const dateRangeStr = `${startLoc} - ${endLoc}`;
       console.log(`Rango: ${dateRangeStr}`);
 
       await fechaLocator.waitFor({ state: 'visible' });
-      console.log("Setting date range directly via DOM evaluate...");
-      await page.evaluate(({ val }) => {
-          const el = document.getElementById('fecha_pactada');
-          if (el) {
-              el.value = val;
-              if (window.$) {
-                  $(el).val(val).trigger('change');
+      console.log("Setting date range directly via DOM evaluate and daterangepicker API...");
+      await page.evaluate(({ val, start, end }) => {
+          const el = window.$ ? $('#fecha_pactada') : null;
+          if (el && el.length) {
+              const picker = el.data('daterangepicker');
+              if (picker) {
+                  const m = window.moment || window.Moment || moment;
+                  if (typeof m === 'function') {
+                      picker.setStartDate(m(start, 'DD/MM/YYYY'));
+                      picker.setEndDate(m(end, 'DD/MM/YYYY'));
+                  } else {
+                      picker.setStartDate(start);
+                      picker.setEndDate(end);
+                  }
+                  el.trigger('apply.daterangepicker', picker);
+                  el.trigger('change');
               } else {
-                  el.dispatchEvent(new Event('change', { bubbles: true }));
+                  el.val(val).trigger('change');
+              }
+          } else {
+              const domEl = document.getElementById('fecha_pactada');
+              if (domEl) {
+                  domEl.value = val;
+                  domEl.dispatchEvent(new Event('change', { bubbles: true }));
               }
           }
-      }, { val: dateRangeStr });
+      }, { val: dateRangeStr, start: startLoc, end: endLoc });
   } catch (err) {
       console.error("ERROR FILTROS:", err.message);
       await page.screenshot({ path: 'debug_error_filtros.png', fullPage: true });
