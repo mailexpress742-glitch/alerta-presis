@@ -150,63 +150,25 @@ async function scrapePresis() {
   await page.screenshot({ path: 'debug_02_after_buscar_final.png', fullPage: true });
   fs.writeFileSync(path.join(__dirname, 'debug_listado_final.html'), await page.content());
 
-  console.log("Intentando Exportar CSV...");
-  let csvBuffer = null;
-  
-  console.log("Configurando interceptaci�n de la descarga...");
-  await context.route('**/exportarExcel', async (route) => {
-      console.log("�Request de exportaci�n detectado por el interceptor!");
-      console.log("POST Body:", route.request().postData());
-
-      try {
-          const response = await route.fetch({ timeout: 120000 });
-          csvBuffer = await response.body();
-          console.log(`Descarga interceptada con �xito: ${csvBuffer.length} bytes`);
-          await route.fulfill({
-              status: 200,
-              contentType: 'text/csv',
-              body: csvBuffer
-          });
-      } catch (err) {
-          console.error("Error al interceptar descarga en la ruta:", err.message);
-          await route.abort();
-      }
-  });
-
+  console.log("Intentando Exportar CSV nativamente...");
   try {
+      const downloadPromise = page.waitForEvent('download', { timeout: 120000 });
       await page.evaluate(() => {
           const els = Array.from(document.querySelectorAll('a, button'));
           const btn = els.find(e => e.innerText && e.innerText.trim() === 'Exportar CSV');
           if (btn) btn.click();
-          else throw new Error('No se encontro boton Exportar CSV');
+          else throw new Error("No se encontro boton Exportar CSV");
       });
-      
-      console.log("Esperando a que el interceptor capture el archivo...");
-      let elapsed = 0;
-      while (!csvBuffer && elapsed < 120000) {
-          await page.waitForTimeout(1000);
-          elapsed += 1000;
-      }
-      
-      if (!csvBuffer) {
-          throw new Error("No se intercept� la descarga del CSV tras 120 segundos.");
-      }
-      
+      const download = await downloadPromise;
       const downloadPath = require('path').join(__dirname, 'export.csv');
-      fs.writeFileSync(downloadPath, csvBuffer);
-      console.log(`CSV Guardado: ${fs.statSync(downloadPath).size} bytes`);
-      
+      await download.saveAs(downloadPath);
+      console.log("CSV Guardado: " + fs.statSync(downloadPath).size + " bytes");
       await page.screenshot({ path: 'debug_03_export_ok.png', fullPage: true });
   } catch (err) {
-      console.error("ERROR EXPORTACI�N:", err.message);
+      console.error("ERROR EXPORTACION:", err.message);
       await page.screenshot({ path: 'debug_error_exportacion.png', fullPage: true });
       process.exit(1);
   }
 
   await browser.close();
 }
-
-scrapePresis().catch(err => {
-    console.error("SCRAPER FAILED:", err.message);
-    process.exit(1);
-});
