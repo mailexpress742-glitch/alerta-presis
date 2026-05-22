@@ -159,7 +159,7 @@ async function scrapePresis() {
       console.log("POST Body:", route.request().postData());
 
       try {
-          const response = await route.fetch();
+          const response = await route.fetch({ timeout: 120000 });
           csvBuffer = await response.body();
           console.log(`Descarga interceptada con �xito: ${csvBuffer.length} bytes`);
           await route.fulfill({
