@@ -53,9 +53,9 @@ async function scrapePresis() {
       
       const hoy = new Date();
       const hace30Dias = new Date(hoy);
-      hace30Dias.setDate(hoy.getDate() - 30);
+      hace30Dias.setDate(hoy.getDate() - 15);
       const en30Dias = new Date(hoy);
-      en30Dias.setDate(hoy.getDate() + 30);
+      en30Dias.setDate(hoy.getDate() + 15);
       
       const startLoc = formatLoc(hace30Dias);
       const endLoc = formatLoc(en30Dias);
@@ -152,7 +152,7 @@ async function scrapePresis() {
 
   console.log("Intentando Exportar CSV nativamente...");
   try {
-      const downloadPromise = page.waitForEvent('download', { timeout: 120000 });
+      const downloadPromise = page.waitForEvent('download', { timeout: 300000 });
       await page.evaluate(() => {
           window.exportFilter = function(val) { var frm = document.getElementById('formulario'); if(frm) { var jq = window["$"]; jq('#type_export').remove(); frm.action = 'https://mexlv.epresis.com/guias/exportarExcel'; frm.method = 'post'; frm.target = '_self'; jq('<input>', {name:'type', type:'hidden', value:val, id:'type_export'}).appendTo(frm); frm.submit(); frm.action = ''; } };
           const els = Array.from(document.querySelectorAll('a, button'));
