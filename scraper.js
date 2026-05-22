@@ -154,26 +154,7 @@ async function scrapePresis() {
   try {
       const downloadPromise = page.waitForEvent('download', { timeout: 120000 });
       await page.evaluate(() => {
-          window.exportFilter = function(val) { var frm = document.getElementById('formulario'); if(frm) { var jq = window['
-          const btn = els.find(e => e.innerText && e.innerText.trim() === 'Exportar CSV');
-          if (btn) btn.click();
-          else throw new Error("No se encontro boton Exportar CSV");
-      });
-      const download = await downloadPromise;
-      const downloadPath = require('path').join(__dirname, 'export.csv');
-      await download.saveAs(downloadPath);
-      console.log("CSV Guardado: " + fs.statSync(downloadPath).size + " bytes");
-      await page.screenshot({ path: 'debug_03_export_ok.png', fullPage: true });
-  } catch (err) {
-      console.error("ERROR EXPORTACION:", err.message);
-      await page.screenshot({ path: 'debug_error_exportacion.png', fullPage: true });
-      process.exit(1);
-  }
-
-  await browser.close();
-}
-scrapePresis().catch(err => { console.error('SCRAPER FAILED:', err.message); process.exit(1); });
-]; jq('#type_export').remove(); frm.action = 'https://mexlv.epresis.com/guias/exportarExcel'; frm.method = 'post'; frm.target = '_self'; jq('<input>', {name:'type', type:'hidden', value:val, id:'type_export'}).appendTo(frm); frm.submit(); frm.action = ''; } };
+          window.exportFilter = function(val) { var frm = document.getElementById('formulario'); if(frm) { var jq = window["$"]; jq('#type_export').remove(); frm.action = 'https://mexlv.epresis.com/guias/exportarExcel'; frm.method = 'post'; frm.target = '_self'; jq('<input>', {name:'type', type:'hidden', value:val, id:'type_export'}).appendTo(frm); frm.submit(); frm.action = ''; } };
           const els = Array.from(document.querySelectorAll('a, button'));
           const btn = els.find(e => e.innerText && e.innerText.trim() === 'Exportar CSV');
           if (btn) btn.click();
