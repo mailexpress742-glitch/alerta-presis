@@ -172,3 +172,4 @@ async function scrapePresis() {
 
   await browser.close();
 }
+scrapePresis().catch(err => { console.error('SCRAPER FAILED:', err.message); process.exit(1); });
