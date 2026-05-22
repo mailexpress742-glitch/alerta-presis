@@ -53,9 +53,9 @@ async function scrapePresis() {
       
       const hoy = new Date();
       const hace30Dias = new Date(hoy);
-      hace30Dias.setDate(hoy.getDate() - 15);
+      hace30Dias.setDate(hoy.getDate() - 5);
       const en30Dias = new Date(hoy);
-      en30Dias.setDate(hoy.getDate() + 15);
+      en30Dias.setDate(hoy.getDate() + 3);
       
       const startLoc = formatLoc(hace30Dias);
       const endLoc = formatLoc(en30Dias);
@@ -197,6 +197,7 @@ async function scrapePresis() {
   await browser.close();
 }
 scrapePresis().catch(err => { console.error('SCRAPER FAILED:', err.message); process.exit(1); });
+
 
 
 
