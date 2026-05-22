@@ -1,23 +1,37 @@
-﻿require('dotenv').config();
+﻿const child_process = require('child_process');
+
+if (!process.env.HAS_RESTARTED) {
+    console.log("Reiniciando el parser con 4GB de memoria limite para procesar el archivo gigante...");
+    try {
+        child_process.execSync('node --max-old-space-size=4096 ' + __filename, {
+            env: { ...process.env, HAS_RESTARTED: '1' },
+            stdio: 'inherit'
+        });
+    } catch (e) {
+        process.exit(1);
+    }
+    process.exit(0);
+}
+
+require('dotenv').config();
 const fs = require('fs');
-const cheerio = require('cheerio');
+const nodemailer = require('nodemailer');
 
 async function procesarAlertas() {
-    console.log("Leyendo archivo export.csv...");
-    const htmlContent = fs.readFileSync('export.csv', 'utf8');
+    console.log("Parseando HTML con String Loop de bajo consumo de memoria...");
+    const stripHtml = (s) => s ? Buffer.from(s.replace(/<[^>]+>/g, '').trim()).toString('utf8') : '';
+
+    let htmlContent = fs.readFileSync('export.csv', 'utf8');
     
-    console.log("Parseando HTML con Cheerio...");
-    const $ = cheerio.load(htmlContent);
+    let headers = [];
+    const theadStart = htmlContent.indexOf('<thead');
+    const theadEnd = htmlContent.indexOf('</thead');
+    if (theadStart !== -1 && theadEnd !== -1) {
+        const thead = htmlContent.substring(theadStart, theadEnd);
+        const thMatches = [...thead.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/gi)];
+        headers = thMatches.map(m => stripHtml(m[1]));
+    }
     
-    const alertas = [];
-    
-    // Mapeo dinamico de headers
-    const headers = [];
-    $('thead th').each((i, th) => {
-        headers.push($(th).text().trim());
-    });
-    
-    // Indices de interÃ©s
     const idxGuia = headers.indexOf('Nro Guia');
     const idxCliente = headers.indexOf('Remitente') !== -1 ? headers.indexOf('Remitente') : headers.indexOf('Cliente'); 
     const idxRemito = headers.indexOf('Remito');
@@ -27,31 +41,60 @@ async function procesarAlertas() {
     
     console.log(`Indices detectados - Guia: ${idxGuia}, Pactada: ${idxFechaPactada}, Estado: ${idxEstado}`);
 
-    const rows = $('tbody tr');
-    console.log(`Se encontraron ${rows.length} registros. Procesando...`);
-    
+    const alertas = [];
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
-    // ClasificaciÃ³n y Filtrado
-    rows.each((i, row) => {
-        const cols = $(row).find('td');
-        if (cols.length < 10) return;
+    const tbodyStart = htmlContent.indexOf('<tbody');
+    const tbodyEnd = htmlContent.indexOf('</tbody', tbodyStart);
+    
+    let currentIdx = tbodyStart !== -1 ? tbodyStart : 0;
+    const endLimit = tbodyEnd !== -1 ? tbodyEnd : htmlContent.length;
+    let count = 0;
+    
+    console.log("Iniciando bucle de extraccion rapida...");
+    
+    while (currentIdx !== -1 && currentIdx < endLimit) {
+        const trStart = htmlContent.indexOf('<tr', currentIdx);
+        if (trStart === -1 || trStart > endLimit) break;
         
-        const fechaPactadaStr = $(cols[idxFechaPactada]).text().trim();
-        const fechaIngresoStr = $(cols[idxFechaIngreso]).text().trim();
-        const estado = $(cols[idxEstado]).text().trim();
+        const trEnd = htmlContent.indexOf('</tr>', trStart);
+        if (trEnd === -1) break;
         
-        if (!fechaPactadaStr || !fechaIngresoStr) return;
+        const trStr = htmlContent.substring(trStart, trEnd);
+        currentIdx = trEnd + 5;
+        count++;
+        
+        const tds = [];
+        let tdCur = 0;
+        while (true) {
+            const tdS = trStr.indexOf('<td', tdCur);
+            if (tdS === -1) break;
+            const tdClose = trStr.indexOf('>', tdS);
+            if (tdClose === -1) break;
+            const tdE = trStr.indexOf('</td>', tdClose);
+            if (tdE === -1) break;
+            
+            tds.push(stripHtml(trStr.substring(tdClose + 1, tdE)));
+            tdCur = tdE + 5;
+        }
+        
+        if (tds.length < 10) continue;
+        
+        const fechaPactadaStr = tds[idxFechaPactada];
+        const fechaIngresoStr = tds[idxFechaIngreso];
+        const estado = tds[idxEstado];
+        
+        if (!fechaPactadaStr || !fechaIngresoStr) continue;
 
         const estadosPermitidos = [
-            'Esperando programaciÃ³n', 'En transito', 'Falla mecÃ¡nica', 'En ruta para su entrega',
+            'Esperando programación', 'En transito', 'Falla mecánica', 'En ruta para su entrega',
             'No se encuentra', 'Despachado', 'Retirado por el dist', 'Reprogramacion por no visita',
             'Sin visita', 'Despachado al int', '1 visita sin contacto'
         ];
 
         const estadoValido = estadosPermitidos.some(e => estado.toLowerCase().includes(e.toLowerCase()));
-        if (!estadoValido) return; 
+        if (!estadoValido) continue;
         
         let datePactada;
         if (fechaPactadaStr.includes('-')) {
@@ -62,13 +105,11 @@ async function procesarAlertas() {
             datePactada = new Date(p[2], p[1] - 1, p[0]);
         }
         
-        if (!datePactada || isNaN(datePactada.getTime())) return;
+        if (!datePactada || isNaN(datePactada.getTime())) continue;
         datePactada.setHours(0, 0, 0, 0);
 
-        // --- FILTRO DE MES ---
-        // Permitimos el mes actual y el anterior para capturar las vencidas dentro del rango de bÃºsqueda de 30 dÃ­as
         const limiteInferior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
-        if (datePactada < limiteInferior) return;
+        if (datePactada < limiteInferior) continue;
 
         const utcHoy = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
         const utcPactada = Date.UTC(datePactada.getFullYear(), datePactada.getMonth(), datePactada.getDate());
@@ -83,95 +124,65 @@ async function procesarAlertas() {
         const pactadaSalida = `${d}/${m}/${datePactada.getFullYear()}`;
 
         alertas.push({
-            guia: $(cols[idxGuia]).text().trim(),
-            remito: $(cols[idxRemito]).text().trim(),
-            cliente: $(cols[idxCliente]).text().trim().substring(0, 30),
-            estado: estado.replace(/^\d+-/, '').substring(0, 30),
+            guia: tds[idxGuia],
+            cliente: tds[idxCliente],
+            remito: tds[idxRemito],
+            estado: estado,
             fechaPactada: pactadaSalida,
-            categoria: categoria
+            fechaIngreso: fechaIngresoStr,
+            categoria: categoria,
+            diasRestantes: diffDays
         });
-    });
-    
-    // Separar y ordenar para priorizar lo de HOY
-    const criticos = alertas.filter(a => a.categoria === 'CRITICO').sort((a, b) => {
-        // Ordenamos por fecha descendente (lo mÃ¡s nuevo arriba)
-        // Pero queremos que lo de HOY (11/03) estÃ© arriba de todo.
-        const [da, ma, ya] = a.fechaPactada.split('/').map(Number);
-        const [db, mb, yb] = b.fechaPactada.split('/').map(Number);
-        const dateA = new Date(ya, ma - 1, da);
-        const dateB = new Date(yb, mb - 1, db);
-        return dateB - dateA; // Descendente: 11/03 antes que 09/03
-    });
-    const advertencias = alertas.filter(a => a.categoria === 'ADVERTENCIA').sort((a, b) => {
-        const [da, ma, ya] = a.fechaPactada.split('/').map(Number);
-        const [db, mb, yb] = b.fechaPactada.split('/').map(Number);
-        return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db); // Ascendente (12/03 antes que 13/03)
-    });
-    const proximos = alertas.filter(a => a.categoria === 'PROXIMO').sort((a, b) => {
-        const [da, ma, ya] = a.fechaPactada.split('/').map(Number);
-        const [db, mb, yb] = b.fechaPactada.split('/').map(Number);
-        return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db); // Ascendente
-    });
-    
-    const hoyStr = `${hoy.getDate().toString().padStart(2, '0')}/${(hoy.getMonth()+1).toString().padStart(2, '0')}/${hoy.getFullYear()}`;
-    const hoyCount = criticos.filter(a => a.fechaPactada === hoyStr).length;
+    }
 
-    console.log(`Resumen Final - HOY (${hoyStr}): ${hoyCount}, CRITICOS TOTAL: ${criticos.length}, ADVERTENCIAS: ${advertencias.length}, PROXIMOS: ${proximos.length}`);
-    console.log("Primeros Criticos (ordenados):", criticos.slice(0, 5).map(a => `${a.guia}: ${a.fechaPactada}`));
+    console.log(`Se procesaron ${count} registros HTML en total. Alertas: ${alertas.length}`);
 
-    const nombresMeses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-    const nombreMesActual = nombresMeses[hoy.getMonth()];
+    const criticos = alertas.filter(a => a.categoria === 'CRITICO');
+    const advertencias = alertas.filter(a => a.categoria === 'ADVERTENCIA');
+
+    console.log(`Alertas criticas: ${criticos.length}`);
+    console.log(`Alertas advertencia: ${advertencias.length}`);
+
+    if (alertas.length === 0) {
+        console.log("No hay alertas para enviar.");
+        return;
+    }
 
     let emailHtml = `
-      <div style="font-family:Arial,sans-serif;color:#333;max-width:800px;margin:0 auto">
-        <h2>Reporte Diario Presis (${new Date().toLocaleDateString()})</h2>
-        <p>CategorizaciÃ³n de guÃ­as por Fecha Pactada (Mes de ${nombreMesActual} y pendientes del mes anterior):</p>
+    <h2>Reporte de Alertas - Epresis</h2>
+    <p>Se encontraron <b>${criticos.length}</b> envíos CRÍTICOS y <b>${advertencias.length}</b> ADVERTENCIAS.</p>
     `;
-    
-    const renderTable = (lista, tituloHtml, color, limite = 30) => {
-        if (lista.length === 0) return '';
-        const items = lista.slice(0, limite);
-        let htmlSnippet = `
-          <div style="margin-top:20px;margin-bottom:5px;font-weight:bold;color:${color}">
-            ${tituloHtml} (Mostrando ${items.length} de ${lista.length})
-          </div>
-          <table style="width:100%;border-collapse:collapse;border:1px solid #000" border="1" cellspacing="0" cellpadding="5">
-            <tr style="background:#eee;font-size:12px">
-              <th style="border:1px solid #000">Guia</th>
-              <th style="border:1px solid #000">Remito</th>
-              <th style="border:1px solid #000">Cliente</th>
-              <th style="border:1px solid #000">Pactada</th>
-              <th style="border:1px solid #000">Estado</th>
+
+    if (criticos.length > 0) {
+        emailHtml += `
+        <h3 style="color: red;">CRÍTICOS (Vencidos o Vencen Hoy)</h3>
+        <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+            <tr style="background-color: #ffcccc;">
+                <th>Guía</th><th>Cliente</th><th>Remito</th><th>Estado</th><th>Fecha Pactada</th><th>Atraso (días)</th>
             </tr>
-        `;
-        
-        items.forEach(a => {
-            htmlSnippet += `
-              <tr style="font-size:11px">
-                <td style="border:1px solid #000">${a.guia}</td>
-                <td style="border:1px solid #000">${a.remito}</td>
-                <td style="border:1px solid #000">${a.cliente}</td>
-                <td style="border:1px solid #000;text-align:center">${a.fechaPactada}</td>
-                <td style="border:1px solid #000">${a.estado}</td>
-              </tr>
-            `;
-        });
-        htmlSnippet += `</table>`;
-        return htmlSnippet;
-    };
+            ${criticos.map(a => `
+            <tr>
+                <td>${a.guia}</td><td>${a.cliente}</td><td>${a.remito}</td><td>${a.estado}</td><td>${a.fechaPactada}</td><td style="color: red; font-weight: bold;">${a.diasRestantes}</td>
+            </tr>
+            `).join('')}
+        </table><br/>`;
+    }
 
-    emailHtml += renderTable(criticos, 'ðŸ”´ CRÃTICO (HOY o VENCIDAS)', '#d32f2f');
-    emailHtml += renderTable(advertencias, 'ðŸŸ¡ PRÃ“XIMAS 48 HORAS', '#f57f17');
-    emailHtml += renderTable(proximos, 'ðŸŸ¢ PRÃ“XIMA SEMANA', '#388e3c');
-    emailHtml += `</div>`;
+    if (advertencias.length > 0) {
+        emailHtml += `
+        <h3 style="color: orange;">ADVERTENCIAS (Vencen en 1-2 días)</h3>
+        <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+            <tr style="background-color: #ffeecc;">
+                <th>Guía</th><th>Cliente</th><th>Remito</th><th>Estado</th><th>Fecha Pactada</th><th>Faltan (días)</th>
+            </tr>
+            ${advertencias.map(a => `
+            <tr>
+                <td>${a.guia}</td><td>${a.cliente}</td><td>${a.remito}</td><td>${a.estado}</td><td>${a.fechaPactada}</td><td style="color: orange; font-weight: bold;">${a.diasRestantes}</td>
+            </tr>
+            `).join('')}
+        </table>`;
+    }
 
-    // Guardar el reporte HTML para verlo
-    fs.writeFileSync('reporte.html', emailHtml);
-    console.log("Reporte generado en reporte.html.");
-
-    // Nodemailer
-    const nodemailer = require('nodemailer');
-    
     const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'smtp.gmail.com',
         port: parseInt(process.env.SMTP_PORT) || 587,
@@ -188,7 +199,7 @@ async function procesarAlertas() {
             const info = await transporter.sendMail({
                 from: `"Presis Bot" <${process.env.SMTP_USER}>`,
                 to: process.env.REPORT_EMAILS || 'destinatario@ejemplo.com',
-                subject: `Alerta Presis - ${criticos.length} CRÃTICAS | ${advertencias.length} ADVERTENCIAS`,
+                subject: `Alerta Presis - ${criticos.length} CRÍTICAS | ${advertencias.length} ADVERTENCIAS`,
                 html: emailHtml,
             });
             console.log("Correo enviado:", info.messageId);
@@ -196,10 +207,8 @@ async function procesarAlertas() {
             console.error("Error enviando correo:", e);
         }
     } else {
-        console.log("No se configuraron variables de entorno SMTP. Saltando envÃ­o.");
+        console.log("No se configuraron variables de entorno SMTP. Saltando envío.");
     }
 }
 
-procesarAlertas();
-
-
+procesarAlertas().catch(console.error);
