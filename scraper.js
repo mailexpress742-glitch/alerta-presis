@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
@@ -98,7 +98,7 @@ async function scrapePresis() {
               serialize: $('#formulario').serializeArray().find(d => d.name === 'fecha_pactada')
           };
       });
-      console.log("LOG 2 (despu�s de 1s):", log2);
+      console.log("LOG 2 (despuï¿½s de 1s):", log2);
 
   } catch (err) {
       console.error("ERROR FILTROS:", err.message);
@@ -145,25 +145,48 @@ async function scrapePresis() {
           serialize: $('#formulario').serializeArray().find(d => d.name === 'fecha_pactada')
       };
   });
-  console.log("LOG 4 (despu�s de Buscar completado):", log4);
+  console.log("LOG 4 (despuï¿½s de Buscar completado):", log4);
   
   await page.screenshot({ path: 'debug_02_after_buscar_final.png', fullPage: true });
   fs.writeFileSync(path.join(__dirname, 'debug_listado_final.html'), await page.content());
 
-  console.log("Intentando Exportar CSV nativamente...");
+  console.log("Intentando Exportar CSV mediante POST directo...");
   try {
-      const downloadPromise = page.waitForEvent('download', { timeout: 300000 });
-      await page.evaluate(() => {
-          window.exportFilter = function(val) { var frm = document.getElementById('formulario'); if(frm) { var jq = window["$"]; jq('#type_export').remove(); frm.action = 'https://mexlv.epresis.com/guias/exportarExcel'; frm.method = 'post'; frm.target = '_self'; jq('<input>', {name:'type', type:'hidden', value:val, id:'type_export'}).appendTo(frm); frm.submit(); frm.action = ''; } };
-          const els = Array.from(document.querySelectorAll('a, button'));
-          const btn = els.find(e => e.innerText && e.innerText.trim() === 'Exportar CSV');
-          if (btn) btn.click();
-          else throw new Error("No se encontro boton Exportar CSV");
+      const formDataString = await page.evaluate(() => {
+        const val = 'csv';
+        const frm = document.getElementById('formulario');
+        if (!frm) return null;
+        let existing = document.getElementById('type_export');
+        if (existing) existing.remove();
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'type';
+        input.value = val;
+        input.id = 'type_export';
+        frm.appendChild(input);
+        return window["$"]('#formulario').serialize();
       });
-      const download = await downloadPromise;
+
+      if (!formDataString) throw new Error("No se pudo extraer el formulario");
+
+      console.log("Formulario serializado correctamente. Enviando POST directo...");
+      
+      const apiContext = await browser.newContext();
+      const cookies = await context.cookies();
+      await apiContext.addCookies(cookies);
+      
+      const response = await apiContext.request.post('https://mexlv.epresis.com/guias/exportarExcel', {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        data: formDataString,
+        timeout: 300000
+      });
+
+      if (!response.ok()) throw new Error('HTTP ' + response.status() + ': ' + response.statusText());
+
+      const buffer = await response.body();
       const downloadPath = require('path').join(__dirname, 'export.csv');
-      await download.saveAs(downloadPath);
-      console.log("CSV Guardado: " + fs.statSync(downloadPath).size + " bytes");
+      require('fs').writeFileSync(downloadPath, buffer);
+      console.log("CSV Guardado: " + buffer.length + " bytes");
       await page.screenshot({ path: 'debug_03_export_ok.png', fullPage: true });
   } catch (err) {
       console.error("ERROR EXPORTACION:", err.message);
@@ -174,3 +197,5 @@ async function scrapePresis() {
   await browser.close();
 }
 scrapePresis().catch(err => { console.error('SCRAPER FAILED:', err.message); process.exit(1); });
+
+
