@@ -98,7 +98,7 @@ async function scrapePresis() {
               serialize: $('#formulario').serializeArray().find(d => d.name === 'fecha_pactada')
           };
       });
-      console.log("LOG 2 (después de 1s):", log2);
+      console.log("LOG 2 (despuï¿½s de 1s):", log2);
 
   } catch (err) {
       console.error("ERROR FILTROS:", err.message);
@@ -145,7 +145,7 @@ async function scrapePresis() {
           serialize: $('#formulario').serializeArray().find(d => d.name === 'fecha_pactada')
       };
   });
-  console.log("LOG 4 (después de Buscar completado):", log4);
+  console.log("LOG 4 (despuï¿½s de Buscar completado):", log4);
   
   await page.screenshot({ path: 'debug_02_after_buscar_final.png', fullPage: true });
   fs.writeFileSync(path.join(__dirname, 'debug_listado_final.html'), await page.content());
@@ -153,15 +153,15 @@ async function scrapePresis() {
   console.log("Intentando Exportar CSV...");
   let csvBuffer = null;
   
-  console.log("Configurando interceptación de la descarga...");
+  console.log("Configurando interceptaciï¿½n de la descarga...");
   await context.route('**/exportarExcel', async (route) => {
-      console.log("¡Request de exportación detectado por el interceptor!");
+      console.log("ï¿½Request de exportaciï¿½n detectado por el interceptor!");
       console.log("POST Body:", route.request().postData());
 
       try {
           const response = await route.fetch();
           csvBuffer = await response.body();
-          console.log(`Descarga interceptada con éxito: ${csvBuffer.length} bytes`);
+          console.log(`Descarga interceptada con ï¿½xito: ${csvBuffer.length} bytes`);
           await route.fulfill({
               status: 200,
               contentType: 'text/csv',
@@ -176,9 +176,9 @@ async function scrapePresis() {
   try {
       await page.evaluate(() => {
           const els = Array.from(document.querySelectorAll('a, button'));
-          const btn = els.find(e => e.innerText && (e.innerText.includes('CSV') || e.innerText.includes('Exportar')));
+          const btn = els.find(e => e.innerText && e.innerText.trim() === 'Exportar CSV');
           if (btn) btn.click();
-          else throw new Error("No se encontró botón CSV/Exportar");
+          else throw new Error('No se encontro boton Exportar CSV');
       });
       
       console.log("Esperando a que el interceptor capture el archivo...");
@@ -189,7 +189,7 @@ async function scrapePresis() {
       }
       
       if (!csvBuffer) {
-          throw new Error("No se interceptó la descarga del CSV tras 120 segundos.");
+          throw new Error("No se interceptï¿½ la descarga del CSV tras 120 segundos.");
       }
       
       const downloadPath = require('path').join(__dirname, 'export.csv');
@@ -198,7 +198,7 @@ async function scrapePresis() {
       
       await page.screenshot({ path: 'debug_03_export_ok.png', fullPage: true });
   } catch (err) {
-      console.error("ERROR EXPORTACIÓN:", err.message);
+      console.error("ERROR EXPORTACIï¿½N:", err.message);
       await page.screenshot({ path: 'debug_error_exportacion.png', fullPage: true });
       process.exit(1);
   }
