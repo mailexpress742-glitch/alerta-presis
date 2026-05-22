@@ -1,4 +1,4 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 const fs = require('fs');
 const cheerio = require('cheerio');
 
@@ -17,7 +17,7 @@ async function procesarAlertas() {
         headers.push($(th).text().trim());
     });
     
-    // Indices de interés
+    // Indices de interÃ©s
     const idxGuia = headers.indexOf('Nro Guia');
     const idxCliente = headers.indexOf('Remitente') !== -1 ? headers.indexOf('Remitente') : headers.indexOf('Cliente'); 
     const idxRemito = headers.indexOf('Remito');
@@ -33,7 +33,7 @@ async function procesarAlertas() {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
-    // Clasificación y Filtrado
+    // ClasificaciÃ³n y Filtrado
     rows.each((i, row) => {
         const cols = $(row).find('td');
         if (cols.length < 10) return;
@@ -45,7 +45,7 @@ async function procesarAlertas() {
         if (!fechaPactadaStr || !fechaIngresoStr) return;
 
         const estadosPermitidos = [
-            'Esperando programación', 'En transito', 'Falla mecánica', 'En ruta para su entrega',
+            'Esperando programaciÃ³n', 'En transito', 'Falla mecÃ¡nica', 'En ruta para su entrega',
             'No se encuentra', 'Despachado', 'Retirado por el dist', 'Reprogramacion por no visita',
             'Sin visita', 'Despachado al int', '1 visita sin contacto'
         ];
@@ -66,7 +66,7 @@ async function procesarAlertas() {
         datePactada.setHours(0, 0, 0, 0);
 
         // --- FILTRO DE MES ---
-        // Permitimos el mes actual y el anterior para capturar las vencidas dentro del rango de búsqueda de 30 días
+        // Permitimos el mes actual y el anterior para capturar las vencidas dentro del rango de bÃºsqueda de 30 dÃ­as
         const limiteInferior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
         if (datePactada < limiteInferior) return;
 
@@ -94,8 +94,8 @@ async function procesarAlertas() {
     
     // Separar y ordenar para priorizar lo de HOY
     const criticos = alertas.filter(a => a.categoria === 'CRITICO').sort((a, b) => {
-        // Ordenamos por fecha descendente (lo más nuevo arriba)
-        // Pero queremos que lo de HOY (11/03) esté arriba de todo.
+        // Ordenamos por fecha descendente (lo mÃ¡s nuevo arriba)
+        // Pero queremos que lo de HOY (11/03) estÃ© arriba de todo.
         const [da, ma, ya] = a.fechaPactada.split('/').map(Number);
         const [db, mb, yb] = b.fechaPactada.split('/').map(Number);
         const dateA = new Date(ya, ma - 1, da);
@@ -125,7 +125,7 @@ async function procesarAlertas() {
     let emailHtml = `
       <div style="font-family:Arial,sans-serif;color:#333;max-width:800px;margin:0 auto">
         <h2>Reporte Diario Presis (${new Date().toLocaleDateString()})</h2>
-        <p>Categorización de guías por Fecha Pactada (Mes de ${nombreMesActual} y pendientes del mes anterior):</p>
+        <p>CategorizaciÃ³n de guÃ­as por Fecha Pactada (Mes de ${nombreMesActual} y pendientes del mes anterior):</p>
     `;
     
     const renderTable = (lista, tituloHtml, color, limite = 30) => {
@@ -160,9 +160,9 @@ async function procesarAlertas() {
         return htmlSnippet;
     };
 
-    emailHtml += renderTable(criticos, '🔴 CRÍTICO (HOY o VENCIDAS)', '#d32f2f');
-    emailHtml += renderTable(advertencias, '🟡 PRÓXIMAS 48 HORAS', '#f57f17');
-    emailHtml += renderTable(proximos, '🟢 PRÓXIMA SEMANA', '#388e3c');
+    emailHtml += renderTable(criticos, 'ðŸ”´ CRÃTICO (HOY o VENCIDAS)', '#d32f2f');
+    emailHtml += renderTable(advertencias, 'ðŸŸ¡ PRÃ“XIMAS 48 HORAS', '#f57f17');
+    emailHtml += renderTable(proximos, 'ðŸŸ¢ PRÃ“XIMA SEMANA', '#388e3c');
     emailHtml += `</div>`;
 
     // Guardar el reporte HTML para verlo
@@ -188,7 +188,7 @@ async function procesarAlertas() {
             const info = await transporter.sendMail({
                 from: `"Presis Bot" <${process.env.SMTP_USER}>`,
                 to: process.env.REPORT_EMAILS || 'destinatario@ejemplo.com',
-                subject: `Alerta Presis - ${criticos.length} CRÍTICAS | ${advertencias.length} ADVERTENCIAS`,
+                subject: `Alerta Presis - ${criticos.length} CRÃTICAS | ${advertencias.length} ADVERTENCIAS`,
                 html: emailHtml,
             });
             console.log("Correo enviado:", info.messageId);
@@ -196,8 +196,9 @@ async function procesarAlertas() {
             console.error("Error enviando correo:", e);
         }
     } else {
-        console.log("No se configuraron variables de entorno SMTP. Saltando envío.");
+        console.log("No se configuraron variables de entorno SMTP. Saltando envÃ­o.");
     }
 }
 
 procesarAlertas();
+
