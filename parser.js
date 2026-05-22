@@ -108,7 +108,7 @@ async function procesarAlertas() {
         if (!datePactada || isNaN(datePactada.getTime())) continue;
         datePactada.setHours(0, 0, 0, 0);
 
-        const limiteInferior = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+        const limiteInferior = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
         if (datePactada < limiteInferior) continue;
 
         const utcHoy = Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
@@ -230,3 +230,4 @@ async function procesarAlertas() {
 }
 
 procesarAlertas().catch(console.error);
+
