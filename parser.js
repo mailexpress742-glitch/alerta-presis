@@ -125,63 +125,81 @@ async function procesarAlertas() {
 
         alertas.push({
             guia: tds[idxGuia],
-            cliente: tds[idxCliente],
             remito: tds[idxRemito],
-            estado: estado,
+            cliente: tds[idxCliente].substring(0, 30),
+            estado: estado.replace(/^\d+-/, '').substring(0, 30),
             fechaPactada: pactadaSalida,
-            fechaIngreso: fechaIngresoStr,
-            categoria: categoria,
-            diasRestantes: diffDays
+            categoria: categoria
         });
     }
 
-    console.log(`Se procesaron ${count} registros HTML en total. Alertas: ${alertas.length}`);
+    // Separar y ordenar para priorizar lo de HOY
+    const criticos = alertas.filter(a => a.categoria === 'CRITICO').sort((a, b) => {
+        const [da, ma, ya] = a.fechaPactada.split('/').map(Number);
+        const [db, mb, yb] = b.fechaPactada.split('/').map(Number);
+        return new Date(yb, mb - 1, db) - new Date(ya, ma - 1, da); // Descendente
+    });
+    const advertencias = alertas.filter(a => a.categoria === 'ADVERTENCIA').sort((a, b) => {
+        const [da, ma, ya] = a.fechaPactada.split('/').map(Number);
+        const [db, mb, yb] = b.fechaPactada.split('/').map(Number);
+        return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db); // Ascendente
+    });
+    const proximos = alertas.filter(a => a.categoria === 'PROXIMO').sort((a, b) => {
+        const [da, ma, ya] = a.fechaPactada.split('/').map(Number);
+        const [db, mb, yb] = b.fechaPactada.split('/').map(Number);
+        return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db); // Ascendente
+    });
 
-    const criticos = alertas.filter(a => a.categoria === 'CRITICO');
-    const advertencias = alertas.filter(a => a.categoria === 'ADVERTENCIA');
+    const hoyStr = `${hoy.getDate().toString().padStart(2, '0')}/${(hoy.getMonth()+1).toString().padStart(2, '0')}/${hoy.getFullYear()}`;
+    const hoyCount = criticos.filter(a => a.fechaPactada === hoyStr).length;
 
-    console.log(`Alertas criticas: ${criticos.length}`);
-    console.log(`Alertas advertencia: ${advertencias.length}`);
+    console.log(`Resumen Final - HOY (${hoyStr}): ${hoyCount}, CRITICOS TOTAL: ${criticos.length}, ADVERTENCIAS: ${advertencias.length}, PROXIMOS: ${proximos.length}`);
 
-    if (alertas.length === 0) {
-        console.log("No hay alertas para enviar.");
-        return;
-    }
+    const nombresMeses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    const nombreMesActual = nombresMeses[hoy.getMonth()];
 
     let emailHtml = `
-    <h2>Reporte de Alertas - Epresis</h2>
-    <p>Se encontraron <b>${criticos.length}</b> envíos CRÍTICOS y <b>${advertencias.length}</b> ADVERTENCIAS.</p>
+      <div style="font-family:Arial,sans-serif;color:#333;max-width:800px;margin:0 auto">
+        <h2>Reporte Diario Presis (${new Date().toLocaleDateString()})</h2>
+        <p>Categorización de guías por Fecha Pactada (Mes de ${nombreMesActual} y pendientes del mes anterior):</p>
     `;
+    
+    const renderTable = (lista, tituloHtml, color, limite = 30) => {
+        if (lista.length === 0) return '';
+        const items = lista.slice(0, limite);
+        let htmlSnippet = `
+          <div style="margin-top:20px;margin-bottom:5px;font-weight:bold;color:${color}">
+            ${tituloHtml} (Mostrando ${items.length} de ${lista.length})
+          </div>
+          <table style="width:100%;border-collapse:collapse;border:1px solid #000" border="1" cellspacing="0" cellpadding="5">
+            <tr style="background:#eee;font-size:12px">
+              <th style="border:1px solid #000">Guia</th>
+              <th style="border:1px solid #000">Remito</th>
+              <th style="border:1px solid #000">Cliente</th>
+              <th style="border:1px solid #000">Pactada</th>
+              <th style="border:1px solid #000">Estado</th>
+            </tr>
+        `;
+        
+        items.forEach(a => {
+            htmlSnippet += `
+              <tr style="font-size:11px">
+                <td style="border:1px solid #000">${a.guia}</td>
+                <td style="border:1px solid #000">${a.remito}</td>
+                <td style="border:1px solid #000">${a.cliente}</td>
+                <td style="border:1px solid #000;text-align:center">${a.fechaPactada}</td>
+                <td style="border:1px solid #000">${a.estado}</td>
+              </tr>
+            `;
+        });
+        htmlSnippet += `</table>`;
+        return htmlSnippet;
+    };
 
-    if (criticos.length > 0) {
-        emailHtml += `
-        <h3 style="color: red;">CRÍTICOS (Vencidos o Vencen Hoy)</h3>
-        <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
-            <tr style="background-color: #ffcccc;">
-                <th>Guía</th><th>Cliente</th><th>Remito</th><th>Estado</th><th>Fecha Pactada</th><th>Atraso (días)</th>
-            </tr>
-            ${criticos.map(a => `
-            <tr>
-                <td>${a.guia}</td><td>${a.cliente}</td><td>${a.remito}</td><td>${a.estado}</td><td>${a.fechaPactada}</td><td style="color: red; font-weight: bold;">${a.diasRestantes}</td>
-            </tr>
-            `).join('')}
-        </table><br/>`;
-    }
-
-    if (advertencias.length > 0) {
-        emailHtml += `
-        <h3 style="color: orange;">ADVERTENCIAS (Vencen en 1-2 días)</h3>
-        <table border="1" cellpadding="5" cellspacing="0" style="border-collapse: collapse; width: 100%;">
-            <tr style="background-color: #ffeecc;">
-                <th>Guía</th><th>Cliente</th><th>Remito</th><th>Estado</th><th>Fecha Pactada</th><th>Faltan (días)</th>
-            </tr>
-            ${advertencias.map(a => `
-            <tr>
-                <td>${a.guia}</td><td>${a.cliente}</td><td>${a.remito}</td><td>${a.estado}</td><td>${a.fechaPactada}</td><td style="color: orange; font-weight: bold;">${a.diasRestantes}</td>
-            </tr>
-            `).join('')}
-        </table>`;
-    }
+    emailHtml += renderTable(criticos, '🔴 CRÍTICO (HOY o VENCIDAS)', '#d32f2f');
+    emailHtml += renderTable(advertencias, '🟡 PRÓXIMAS 48 HORAS', '#f57f17');
+    emailHtml += renderTable(proximos, '🟢 PRÓXIMA SEMANA', '#388e3c');
+    emailHtml += `</div>`;
 
     const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'smtp.gmail.com',
