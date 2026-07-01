@@ -3,7 +3,7 @@
 if (!process.env.HAS_RESTARTED) {
     console.log("Reiniciando el parser con 4GB de memoria limite para procesar el archivo gigante...");
     try {
-        child_process.execSync('node --max-old-space-size=4096 ' + __filename, {
+        child_process.execSync('node --max-old-space-size=4096 "' + __filename + '" ' + process.argv.slice(2).join(' '), {
             env: { ...process.env, HAS_RESTARTED: '1' },
             stdio: 'inherit'
         });
