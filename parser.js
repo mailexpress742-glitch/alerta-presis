@@ -23,7 +23,7 @@ async function procesarAlertas() {
 
         const sectorParams = process.argv[2] || 'logistica';
     const sectorTitle = sectorParams.toUpperCase();
-    const filename = "export_$sectorParams.csv";
+    const filename = `export_${sectorParams}.csv`;
     let htmlContent = fs.readFileSync(filename, 'utf8');
     
     let headers = [];
@@ -233,5 +233,7 @@ async function procesarAlertas() {
 }
 
 procesarAlertas().catch(console.error);
+
+
 
 
