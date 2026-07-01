@@ -35,7 +35,9 @@ jobs:
         PRESIS_PASS: ${{ secrets.PRESIS_PASS }}
 
     - name: Procesar Datos y Enviar Email
-      run: node parser.js
+      run: |
+        node parser.js logistica
+        node parser.js postal
       env:
         SMTP_HOST: ${{ secrets.SMTP_HOST }}
         SMTP_PORT: ${{ secrets.SMTP_PORT }}
@@ -51,6 +53,7 @@ jobs:
         path: |
           *.png
           *.html
-          export.csv
+          export_*.csv
           debug_botones_exportar.json
+
 
