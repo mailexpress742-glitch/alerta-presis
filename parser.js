@@ -39,6 +39,7 @@ async function procesarAlertas() {
     const idxCliente = headers.indexOf('Remitente') !== -1 ? headers.indexOf('Remitente') : headers.indexOf('Cliente'); 
     const idxRemito = headers.indexOf('Remito');
     const idxEstado = headers.indexOf('Estado');
+    const idxDomicilio = headers.indexOf('Domicilio');
     const idxFechaPactada = headers.indexOf('Fecha Pactada');
     const idxFechaIngreso = headers.indexOf('Fecha'); 
     
@@ -130,6 +131,7 @@ async function procesarAlertas() {
             guia: tds[idxGuia],
             remito: tds[idxRemito],
             cliente: tds[idxCliente].substring(0, 30),
+            domicilio: idxDomicilio !== -1 ? tds[idxDomicilio].substring(0, 40) : '',
             estado: estado.replace(/^\d+-/, '').substring(0, 30),
             fechaPactada: pactadaSalida,
             categoria: categoria
@@ -179,6 +181,7 @@ async function procesarAlertas() {
               <th style="border:1px solid #000">Guia</th>
               <th style="border:1px solid #000">Remito</th>
               <th style="border:1px solid #000">Cliente</th>
+              <th style="border:1px solid #000">Domicilio</th>
               <th style="border:1px solid #000">Pactada</th>
               <th style="border:1px solid #000">Estado</th>
             </tr>
@@ -190,6 +193,7 @@ async function procesarAlertas() {
                 <td style="border:1px solid #000">${a.guia}</td>
                 <td style="border:1px solid #000">${a.remito}</td>
                 <td style="border:1px solid #000">${a.cliente}</td>
+                <td style="border:1px solid #000">${a.domicilio}</td>
                 <td style="border:1px solid #000;text-align:center">${a.fechaPactada}</td>
                 <td style="border:1px solid #000">${a.estado}</td>
               </tr>
