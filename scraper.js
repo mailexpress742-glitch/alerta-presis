@@ -150,43 +150,58 @@ async function scrapePresis() {
   await page.screenshot({ path: 'debug_02_after_buscar_final.png', fullPage: true });
   fs.writeFileSync(path.join(__dirname, 'debug_listado_final.html'), await page.content());
 
-  console.log("Intentando Exportar CSV mediante POST directo...");
+  console.log("Preparando exportación múltiple por Sector...");
   try {
-      const formDataString = await page.evaluate(() => {
-        const val = 'csv';
-        const frm = document.getElementById('formulario');
-        if (!frm) return null;
-        let existing = document.getElementById('type_export');
-        if (existing) existing.remove();
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'type';
-        input.value = val;
-        input.id = 'type_export';
-        frm.appendChild(input);
-        return window["$"]('#formulario').serialize();
-      });
-
-      if (!formDataString) throw new Error("No se pudo extraer el formulario");
-
-      console.log("Formulario serializado correctamente. Enviando POST directo...");
-      
       const apiContext = await browser.newContext();
       const cookies = await context.cookies();
       await apiContext.addCookies(cookies);
+
+      const exportSector = async (sectorName, filename) => {
+          console.log(`Exportando sector: ${sectorName} a ${filename}`);
+          
+          const formDataString = await page.evaluate((sectorOpt) => {
+              const select = document.getElementById('sector');
+              if (select) {
+                  const opt = Array.from(select.options).find(o => o.value === sectorOpt || o.text.includes(sectorOpt));
+                  if (opt) {
+                      select.value = opt.value;
+                      window["$"](select).trigger('change');
+                  }
+              }
+              
+              const val = 'csv';
+              const frm = document.getElementById('formulario');
+              if (!frm) return null;
+              let existing = document.getElementById('type_export');
+              if (existing) existing.remove();
+              const input = document.createElement('input');
+              input.type = 'hidden';
+              input.name = 'type';
+              input.value = val;
+              input.id = 'type_export';
+              frm.appendChild(input);
+              return window["$"]('#formulario').serialize();
+          }, sectorName);
+
+          if (!formDataString) throw new Error("No se pudo extraer el formulario para " + sectorName);
+
+          const response = await apiContext.request.post('https://mexlv.epresis.com/guias/exportarExcel', {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            data: formDataString,
+            timeout: 300000
+          });
+
+          if (!response.ok()) throw new Error('HTTP ' + response.status() + ': ' + response.statusText());
+
+          const buffer = await response.body();
+          const downloadPath = require('path').join(__dirname, filename);
+          require('fs').writeFileSync(downloadPath, buffer);
+          console.log(`CSV Guardado para ${sectorName}: ${buffer.length} bytes`);
+      };
+
+      await exportSector('LOGÍSTICA', 'export_logistica.csv');
+      await exportSector('POSTAL', 'export_postal.csv');
       
-      const response = await apiContext.request.post('https://mexlv.epresis.com/guias/exportarExcel', {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        data: formDataString,
-        timeout: 300000
-      });
-
-      if (!response.ok()) throw new Error('HTTP ' + response.status() + ': ' + response.statusText());
-
-      const buffer = await response.body();
-      const downloadPath = require('path').join(__dirname, 'export.csv');
-      require('fs').writeFileSync(downloadPath, buffer);
-      console.log("CSV Guardado: " + buffer.length + " bytes");
       await page.screenshot({ path: 'debug_03_export_ok.png', fullPage: true });
   } catch (err) {
       console.error("ERROR EXPORTACION:", err.message);
@@ -197,6 +212,7 @@ async function scrapePresis() {
   await browser.close();
 }
 scrapePresis().catch(err => { console.error('SCRAPER FAILED:', err.message); process.exit(1); });
+
 
 
 

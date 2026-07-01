@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "presis-alertas",
   "version": "1.0.0",
   "description": "",
@@ -18,3 +18,4 @@
     "playwright": "^1.58.2"
   }
 }
+

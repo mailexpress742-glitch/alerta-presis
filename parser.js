@@ -21,7 +21,10 @@ async function procesarAlertas() {
     console.log("Parseando HTML con String Loop de bajo consumo de memoria...");
     const stripHtml = (s) => s ? Buffer.from(s.replace(/<[^>]+>/g, '').trim()).toString('utf8') : '';
 
-    let htmlContent = fs.readFileSync('export.csv', 'utf8');
+        const sectorParams = process.argv[2] || 'logistica';
+    const sectorTitle = sectorParams.toUpperCase();
+    const filename = "export_$sectorParams.csv";
+    let htmlContent = fs.readFileSync(filename, 'utf8');
     
     let headers = [];
     const theadStart = htmlContent.indexOf('<thead');
@@ -160,7 +163,7 @@ async function procesarAlertas() {
 
     let emailHtml = `
       <div style="font-family:Arial,sans-serif;color:#333;max-width:800px;margin:0 auto">
-        <h2>Reporte Diario Presis (${new Date().toLocaleDateString()})</h2>
+        <h2>Reporte Diario Presis - ${sectorTitle} (${new Date().toLocaleDateString()})</h2>
         <p>Categorización de guías por Fecha Pactada (Mes de ${nombreMesActual} y pendientes del mes anterior):</p>
     `;
     
@@ -217,7 +220,7 @@ async function procesarAlertas() {
             const info = await transporter.sendMail({
                 from: `"Presis Bot" <${process.env.SMTP_USER}>`,
                 to: process.env.REPORT_EMAILS || 'destinatario@ejemplo.com',
-                subject: `Alerta Presis - ${criticos.length} CRÍTICAS | ${advertencias.length} ADVERTENCIAS`,
+                subject: `Alerta Presis ${sectorTitle} - ${criticos.length} CRÍTICAS | ${advertencias.length} ADVERTENCIAS`,
                 html: emailHtml,
             });
             console.log("Correo enviado:", info.messageId);
@@ -230,4 +233,5 @@ async function procesarAlertas() {
 }
 
 procesarAlertas().catch(console.error);
+
 
