@@ -59,6 +59,174 @@ function clasificarSucursal(suc) {
 }
 
 async function procesarAlertas() {
+    console.log("Parseando CSV real con readline de bajo consumo de memoria...");
+    const readline = require('readline');
+
+    const sectorParams = process.argv[2] || 'logistica';
+    const sectorTitle = sectorParams.toUpperCase();
+    const filename = `export_${sectorParams}.csv`;
+    
+    if (!fs.existsSync(filename)) {
+        console.error("No se encontro archivo:", filename);
+        return;
+    }
+
+    const hoy = new Date();
+    let alertasPorSucursal = {};
+    let count = 0;
+    
+    let headers = [];
+    let idxGuia, idxCliente, idxRemito, idxEstado, idxDomicilio, idxSucursal, idxFechaPactada, idxFechaIngreso;
+    
+    const parseCsvLine = (text) => {
+        let ret = [];
+        let inQuote = false;
+        let value = '';
+        for (let i = 0; i < text.length; i++) {
+            let char = text[i];
+            if (inQuote) {
+                if (char === '"' && i + 1 < text.length && text[i+1] === '"') {
+                    value += '"';
+                    i++;
+                } else if (char === '"') {
+                    inQuote = false;
+                } else {
+                    value += char;
+                }
+            } else {
+                if (char === '"') {
+                    inQuote = true;
+                } else if (char === ';') {
+                    ret.push(value.trim());
+                    value = '';
+                } else {
+                    value += char;
+                }
+            }
+        }
+        ret.push(value.trim());
+        return ret;
+    };
+
+    const fileStream = fs.createReadStream(filename);
+    const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
+
+    let isFirstLine = true;
+    for await (const line of rl) {
+        if (!line.trim()) continue;
+        const tds = parseCsvLine(line);
+        
+        if (isFirstLine) {
+            headers = tds;
+            idxGuia = headers.indexOf('Nro Guia');
+            idxCliente = headers.indexOf('Remitente') !== -1 ? headers.indexOf('Remitente') : headers.indexOf('Cliente'); 
+            idxRemito = headers.indexOf('Remito');
+            idxEstado = headers.indexOf('Estado');
+            idxDomicilio = headers.indexOf('Domicilio');
+            idxSucursal = headers.indexOf('Sucursal');
+            idxFechaPactada = headers.indexOf('Fecha Pactada');
+            idxFechaIngreso = headers.indexOf('Fecha');
+            console.log(`Indices detectados - Guia: ${idxGuia}, Pactada: ${idxFechaPactada}, Estado: ${idxEstado}, Sucursal: ${idxSucursal}`);
+            isFirstLine = false;
+            continue;
+        }
+        
+        count++;
+        if (tds.length < 10) continue;
+        
+        const fechaPactadaStr = tds[idxFechaPactada];
+        const fechaIngresoStr = tds[idxFechaIngreso];
+        const estado = tds[idxEstado];
+        const sucursalTexto = idxSucursal !== -1 ? tds[idxSucursal] : '';
+        
+        if (!fechaPactadaStr || !fechaIngresoStr) continue;
+
+        const estadosPermitidos = [
+            'Esperando programacion', 'Esperando programación', 'En transito', 'Falla mecanica', 'Falla mecánica', 
+            'En ruta para su entrega', 'No se encuentra', 'Despachado', 'Retirado por el dist', 
+            'Reprogramacion por no visita', 'Sin visita', 'Despachado al int', '1 visita sin contacto'
+        ];
+
+        const estadoValido = estadosPermitidos.some(e => estado.toLowerCase().includes(e.toLowerCase()));
+        if (!estadoValido) continue;
+        
+        let datePactada;
+        if (fechaPactadaStr.includes('/')) {
+            const parts = fechaPactadaStr.split('/');
+            if (parts.length >= 3) {
+                datePactada = new Date(parts[2].substring(0,4), parts[1] - 1, parts[0]);
+            }
+        }
+        if (!datePactada || isNaN(datePactada.getTime())) continue;
+
+        const dDiff = Math.ceil((hoy - datePactada) / (1000 * 60 * 60 * 24));
+        if (dDiff >= 1) {
+            let sucLlave = mapearSucursal(sucursalTexto);
+            if (!alertasPorSucursal[sucLlave]) alertasPorSucursal[sucLlave] = [];
+            alertasPorSucursal[sucLlave].push(tds);
+        }
+    }
+﻿const child_process = require('child_process');
+
+if (!process.env.HAS_RESTARTED) {
+    console.log("Reiniciando el parser con 4GB de memoria limite para procesar el archivo gigante...");
+    try {
+        child_process.execSync('node --max-old-space-size=4096 "' + __filename + '" ' + process.argv.slice(2).join(' '), {
+            env: { ...process.env, HAS_RESTARTED: '1' },
+            stdio: 'inherit'
+        });
+    } catch (e) {
+        process.exit(1);
+    }
+    process.exit(0);
+}
+
+require('dotenv').config();
+const fs = require('fs');
+const nodemailer = require('nodemailer');
+
+const emailsLogistica = {
+    'Mendoza': ['traficomendoza@mailexpress.com.ar', 'gestionlogistica@mailexpress.com.ar', 'gquijada@mailexpress.com.ar'],
+    'Bs As': ['Pnavarro@mailexpress.com.ar', 'buenosaires@mailexpress.com.ar'],
+    'San Juan': ['mflores@mailexpress.com.ar', 'gquiroga@mailexpress.com.ar'],
+    'San Rafael': ['ftorres@mailexpress.com.ar', 'sanrafael@mailexpress.com.ar'],
+    'San Luis': ['atcsanluis@mailexpress.com.ar', 'traficosl@mailexpress.com.ar'],
+    'Cordoba': ['Traficocba@mailexpress.com.ar'],
+    'Santa Fe': ['galvarez@mailexpress.com.ar', 'naeberhard@mailexpress.com.ar'],
+    'Rosario': ['lzabala@mailexpress.com.ar'],
+    'Parana': ['naeberhard@mailexpress.com.ar'],
+    'Resto del pais': ['gestionlogistica@mailexpress.com.ar', 'gquijada@mailexpress.com.ar']
+};
+
+const emailsPostal = {
+    'Mendoza': ['acabello@mailexpress.com.ar', 'psiarri@mailexpress.com.ar'],
+    'Bs As': ['Tquijano@mailexpress.com.ar', 'gquijano@mailexpress.com.ar', 'mfernandez@mailexpress.com.ar'],
+    'San Juan': ['mflores@mailexpress.com.ar', 'auditorsj@mailexpress.com.ar'],
+    'San Rafael': ['ftorres@mailexpress.com.ar', 'sanrafael@mailexpress.com.ar'],
+    'San Luis': ['atcsanluis@mailexpress.com.ar', 'cganen@mailexpress.com.ar'],
+    'Cordoba': ['pmalvezzi@mailexpress.com.ar', 'operacionescba@mailexpress.com.ar'],
+    'Santa Fe': ['Vanina.cabral@mailexpress.com.ar', 'naeberhard@mailexpress.com.ar'],
+    'Rosario': ['Vanina.cabral@mailexpress.com.ar'],
+    'Parana': ['naeberhard@mailexpress.com.ar'],
+    'Resto del pais': ['acabello@mailexpress.com.ar']
+};
+
+function clasificarSucursal(suc) {
+    if (!suc) return 'Resto del pais';
+    const s = suc.toUpperCase();
+    if (s.includes('MZA') || s.includes('MENDOZA') || s.includes('DORREGO')) return 'Mendoza';
+    if (s.includes('CABA') || s.includes('BS AS') || s.includes('BUENOS AIRES') || s.includes('FERR')) return 'Bs As';
+    if (s.includes('SAN JUAN') || s.includes('RAWSON')) return 'San Juan';
+    if (s.includes('SAN RAFAEL')) return 'San Rafael';
+    if (s.includes('SAN LUIS') || s.includes('VILLA MERCEDES')) return 'San Luis';
+    if (s.includes('CORDOBA') || s.includes('CBA')) return 'Cordoba';
+    if (s.includes('SANTA FE')) return 'Santa Fe';
+    if (s.includes('ROSARIO')) return 'Rosario';
+    if (s.includes('PARANA')) return 'Parana';
+    return 'Resto del pais';
+}
+
+async function procesarAlertas() {
     console.log("Parseando HTML con String Loop de bajo consumo de memoria...");
     const stripHtml = (s) => s ? Buffer.from(s.replace(/<[^>]+>/g, '').trim()).toString('utf8') : '';
 
