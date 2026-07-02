@@ -244,7 +244,11 @@ async function scrapePresis() {
               require('fs').writeFileSync(require('path').join(__dirname, filename), buffer);
           }
 
-        console.log('Esperando 15 segundos para evitar límite de rate (HTTP 429)...');
+        
+      };
+
+      await exportSector('LOGÍSTICA', 'export_logistica.csv');
+      console.log('Esperando 15 segundos para evitar límite de rate (HTTP 429)...');
       await page.waitForTimeout(15000);
       await exportSector('POSTAL', 'export_postal.csv');
       
