@@ -227,7 +227,7 @@ async function procesarAlertas() {
 
         let emailHtml = `
           <div style="font-family:Arial,sans-serif;color:#333;max-width:800px;margin:0 auto">
-            <h2>Reporte Diario Presis ${sectorTitle} - ${sucursal} (${new Date().toLocaleDateString()})</h2>
+            <h2>Reporte Diario Presis ${sectorTitle} - ${sucursal} (${new Date().toLocaleDateString('es-AR')})</h2>
             <p>Categorizacion de guias por Fecha Pactada (Mes de ${nombreMesActual} y pendientes del mes anterior):</p>
         `;
         
