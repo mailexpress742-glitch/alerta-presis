@@ -200,6 +200,8 @@ async function scrapePresis() {
       };
 
       await exportSector('LOGÍSTICA', 'export_logistica.csv');
+      console.log('Esperando 15 segundos para evitar límite de rate (HTTP 429)...');
+      await page.waitForTimeout(15000);
       await exportSector('POSTAL', 'export_postal.csv');
       
       await page.screenshot({ path: 'debug_03_export_ok.png', fullPage: true });
@@ -212,6 +214,7 @@ async function scrapePresis() {
   await browser.close();
 }
 scrapePresis().catch(err => { console.error('SCRAPER FAILED:', err.message); process.exit(1); });
+
 
 
 
