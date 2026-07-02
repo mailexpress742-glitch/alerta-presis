@@ -194,29 +194,57 @@ async function scrapePresis() {
           if (!response.ok()) throw new Error('HTTP ' + response.status() + ': ' + response.statusText());
 
 
+          
           const buffer = await response.body();
           try {
               const json = JSON.parse(buffer.toString());
               console.log("JSON Response from Epresis:", json);
               if (json.job_id) {
-                  console.log("Going to Jobs Dashboard...");
-                  await page.goto('https://mexlv.epresis.com/admin/jobs/dashboard');
-                  await page.waitForTimeout(5000);
-                  const html = await page.content();
-                  require('fs').writeFileSync('jobs_dashboard_' + filename + '.html', html);
-                  console.log("Saved jobs dashboard HTML.");
+                  let downloadUrl = null;
+                  for (let i = 0; i < 60; i++) {
+                      await page.goto('https://mexlv.epresis.com/admin/jobs/dashboard');
+                      // Esperar a que cargue la tabla
+                      await page.waitForTimeout(2000);
+                      const link = await page.evaluate((id) => {
+                          const rows = document.querySelectorAll('table tbody tr');
+                          for (const row of rows) {
+                              const cells = row.querySelectorAll('td');
+                              if (cells.length > 0 && cells[0].textContent.trim() == id) {
+                                  const links = row.querySelectorAll('a');
+                                  for (let a of links) {
+                                      if (a.href.includes('downloads3') || a.href.includes('.csv') || a.href.includes('.xlsx')) {
+                                          return a.href;
+                                      }
+                                  }
+                              }
+                          }
+                          return null;
+                      }, json.job_id);
+                      
+                      if (link) {
+                          downloadUrl = link;
+                          break;
+                      }
+                      console.log("Esperando que termine el job " + json.job_id + "...");
+                      await page.waitForTimeout(5000);
+                  }
+                  
+                  if (downloadUrl) {
+                      console.log("Descargando archivo desde: " + downloadUrl);
+                      const fileResp = await apiContext.request.get(downloadUrl);
+                      const fileBuffer = await fileResp.body();
+                      require('fs').writeFileSync(require('path').join(__dirname, filename), fileBuffer);
+                      console.log("CSV Guardado exitosamente desde job.");
+                  } else {
+                      console.log("TIMEOUT esperando el job " + json.job_id);
+                  }
               }
           } catch(e) {
-              console.log("Not JSON, saving as normal CSV...");
+              console.log("Respuesta no es JSON (export directo antiguo) o error:", e.message);
+              require('fs').writeFileSync(require('path').join(__dirname, filename), buffer);
           }
-          const downloadPath = require('path').join(__dirname, filename);
-          require('fs').writeFileSync(downloadPath, buffer);
 
-          console.log(`CSV Guardado para ${sectorName}: ${buffer.length} bytes`);
-      };
-
-      await exportSector('LOGÍSTICA', 'export_logistica.csv');
-      console.log('Esperando 15 segundos para evitar límite de rate (HTTP 429)...');
+        console.log('Esperando 15 segundos para evitar límite de rate (HTTP 429)...');
       await page.waitForTimeout(15000);
       await exportSector('POSTAL', 'export_postal.csv');
       
