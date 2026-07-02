@@ -236,7 +236,7 @@ async function procesarAlertas() {
         let emailHtml = `
           <div style="font-family:Arial,sans-serif;color:#333;max-width:800px;margin:0 auto">
             <h2>Reporte Diario Presis ${sectorTitle} - ${sucursal} (${new Date().toLocaleDateString()})</h2>
-            <p>Categorizacin de guas por Fecha Pactada (Mes de ${nombreMesActual} y pendientes del mes anterior):</p>
+            <p>Categorización de guías por Fecha Pactada (Mes de ${nombreMesActual} y pendientes del mes anterior):</p>
         `;
         
         const renderTable = (lista, tituloHtml, color, limite = 30) => {
@@ -273,9 +273,9 @@ async function procesarAlertas() {
             return htmlSnippet;
         };
 
-        emailHtml += renderTable(criticos, '?? CRTICO (HOY o VENCIDAS)', '#d32f2f');
-        emailHtml += renderTable(advertencias, '?? PRXIMAS 48 HORAS', '#f57f17');
-        emailHtml += renderTable(proximos, '?? PRXIMA SEMANA', '#388e3c');
+        emailHtml += renderTable(criticos, '🚨 CRÍTICO (HOY o VENCIDAS)', '#d32f2f');
+        emailHtml += renderTable(advertencias, '⚠️ PRÓXIMAS 48 HORAS', '#f57f17');
+        emailHtml += renderTable(proximos, '🟢 PRÓXIMA SEMANA', '#388e3c');
         emailHtml += `</div>`;
 
         let destinos = [];
@@ -297,7 +297,7 @@ async function procesarAlertas() {
                     from: `"Presis Bot" <${process.env.SMTP_USER}>`,
                     to: destinos.join(', '),
                     cc: process.env.REPORT_EMAILS || '',
-                    subject: `Alerta Presis ${sectorTitle} [${sucursal}] - ${criticos.length} CRTICAS | ${advertencias.length} ADVERTENCIAS`,
+                    subject: `Alerta Presis ${sectorTitle} [${sucursal}] - ${criticos.length} CRÍTICAS | ${advertencias.length} ADVERTENCIAS`,
                     html: emailHtml,
                 });
                 console.log(`Correo enviado a ${sucursal}:`, info.messageId);
