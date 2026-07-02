@@ -17,45 +17,101 @@ require('dotenv').config();
 const fs = require('fs');
 const nodemailer = require('nodemailer');
 
+const emailsLogistica = {
+    'Mendoza': ['traficomendoza@mailexpress.com.ar', 'gestionlogistica@mailexpress.com.ar', 'gquijada@mailexpress.com.ar'],
+    'Bs As': ['Pnavarro@mailexpress.com.ar', 'buenosaires@mailexpress.com.ar'],
+    'San Juan': ['mflores@mailexpress.com.ar', 'gquiroga@mailexpress.com.ar'],
+    'San Rafael': ['ftorres@mailexpress.com.ar', 'sanrafael@mailexpress.com.ar'],
+    'San Luis': ['atcsanluis@mailexpress.com.ar', 'traficosl@mailexpress.com.ar'],
+    'Cordoba': ['Traficocba@mailexpress.com.ar'],
+    'Santa Fe': ['galvarez@mailexpress.com.ar', 'naeberhard@mailexpress.com.ar'],
+    'Rosario': ['lzabala@mailexpress.com.ar'],
+    'Parana': ['naeberhard@mailexpress.com.ar'],
+    'Resto del pais': ['gestionlogistica@mailexpress.com.ar', 'gquijada@mailexpress.com.ar']
+};
+
+const emailsPostal = {
+    'Mendoza': ['acabello@mailexpress.com.ar', 'psiarri@mailexpress.com.ar'],
+    'Bs As': ['Tquijano@mailexpress.com.ar', 'gquijano@mailexpress.com.ar', 'mfernandez@mailexpress.com.ar'],
+    'San Juan': ['mflores@mailexpress.com.ar', 'auditorsj@mailexpress.com.ar'],
+    'San Rafael': ['ftorres@mailexpress.com.ar', 'sanrafael@mailexpress.com.ar'],
+    'San Luis': ['atcsanluis@mailexpress.com.ar', 'cganen@mailexpress.com.ar'],
+    'Cordoba': ['pmalvezzi@mailexpress.com.ar', 'operacionescba@mailexpress.com.ar'],
+    'Santa Fe': ['Vanina.cabral@mailexpress.com.ar', 'naeberhard@mailexpress.com.ar'],
+    'Rosario': ['Vanina.cabral@mailexpress.com.ar'],
+    'Parana': ['naeberhard@mailexpress.com.ar'],
+    'Resto del pais': ['acabello@mailexpress.com.ar']
+};
+
+function clasificarSucursal(suc) {
+    if (!suc) return 'Resto del pais';
+    const s = suc.toUpperCase();
+    if (s.includes('MZA') || s.includes('MENDOZA') || s.includes('DORREGO')) return 'Mendoza';
+    if (s.includes('CABA') || s.includes('BS AS') || s.includes('BUENOS AIRES') || s.includes('FERR')) return 'Bs As';
+    if (s.includes('SAN JUAN') || s.includes('RAWSON')) return 'San Juan';
+    if (s.includes('SAN RAFAEL')) return 'San Rafael';
+    if (s.includes('SAN LUIS') || s.includes('VILLA MERCEDES')) return 'San Luis';
+    if (s.includes('CORDOBA') || s.includes('CBA')) return 'Cordoba';
+    if (s.includes('SANTA FE')) return 'Santa Fe';
+    if (s.includes('ROSARIO')) return 'Rosario';
+    if (s.includes('PARANA')) return 'Parana';
+    return 'Resto del pais';
+}
+
 async function procesarAlertas() {
     console.log("Parseando HTML con String Loop de bajo consumo de memoria...");
     const stripHtml = (s) => s ? Buffer.from(s.replace(/<[^>]+>/g, '').trim()).toString('utf8') : '';
 
-        const sectorParams = process.argv[2] || 'logistica';
+    const sectorParams = process.argv[2] || 'logistica';
     const sectorTitle = sectorParams.toUpperCase();
     const filename = `export_${sectorParams}.csv`;
-    let htmlContent = fs.readFileSync(filename, 'utf8');
+    let htmlContent;
+    try {
+        htmlContent = fs.readFileSync(filename, 'utf8');
+    } catch (e) {
+        console.error("No se encontro archivo:", filename);
+        return;
+    }
     
     let headers = [];
     const theadStart = htmlContent.indexOf('<thead');
-    const theadEnd = htmlContent.indexOf('</thead');
-    if (theadStart !== -1 && theadEnd !== -1) {
-        const thead = htmlContent.substring(theadStart, theadEnd);
-        const thMatches = [...thead.matchAll(/<th[^>]*>([\s\S]*?)<\/th>/gi)];
-        headers = thMatches.map(m => stripHtml(m[1]));
+    if (theadStart === -1) {
+        console.error("No se encontro THEAD");
+        return;
     }
-    
+    const theadEnd = htmlContent.indexOf('</thead', theadStart);
+    const theadStr = htmlContent.substring(theadStart, theadEnd);
+    let hCur = 0;
+    while (true) {
+        const thS = theadStr.indexOf('<th', hCur);
+        if (thS === -1) break;
+        const thClose = theadStr.indexOf('>', thS);
+        if (thClose === -1) break;
+        const thE = theadStr.indexOf('</th>', thClose);
+        if (thE === -1) break;
+        headers.push(stripHtml(theadStr.substring(thClose + 1, thE)));
+        hCur = thE + 5;
+    }
+
     const idxGuia = headers.indexOf('Nro Guia');
     const idxCliente = headers.indexOf('Remitente') !== -1 ? headers.indexOf('Remitente') : headers.indexOf('Cliente'); 
     const idxRemito = headers.indexOf('Remito');
     const idxEstado = headers.indexOf('Estado');
     const idxDomicilio = headers.indexOf('Domicilio');
+    const idxSucursal = headers.indexOf('Sucursal');
     const idxFechaPactada = headers.indexOf('Fecha Pactada');
     const idxFechaIngreso = headers.indexOf('Fecha'); 
-    
-    console.log(`Indices detectados - Guia: ${idxGuia}, Pactada: ${idxFechaPactada}, Estado: ${idxEstado}`);
 
-    const alertas = [];
+    console.log(`Indices detectados - Guia: ${idxGuia}, Pactada: ${idxFechaPactada}, Estado: ${idxEstado}, Sucursal: ${idxSucursal}`);
+
+    let currentIdx = theadEnd;
+    let endLimit = htmlContent.indexOf('</table', currentIdx);
+    if (endLimit === -1) endLimit = htmlContent.length;
+
     const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
+    let alertasPorSucursal = {};
 
-    const tbodyStart = htmlContent.indexOf('<tbody');
-    const tbodyEnd = htmlContent.indexOf('</tbody', tbodyStart);
-    
-    let currentIdx = tbodyStart !== -1 ? tbodyStart : 0;
-    const endLimit = tbodyEnd !== -1 ? tbodyEnd : htmlContent.length;
     let count = 0;
-    
     console.log("Iniciando bucle de extraccion rapida...");
     
     while (currentIdx !== -1 && currentIdx < endLimit) {
@@ -88,11 +144,12 @@ async function procesarAlertas() {
         const fechaPactadaStr = tds[idxFechaPactada];
         const fechaIngresoStr = tds[idxFechaIngreso];
         const estado = tds[idxEstado];
+        const sucursalTexto = idxSucursal !== -1 ? tds[idxSucursal] : '';
         
         if (!fechaPactadaStr || !fechaIngresoStr) continue;
 
         const estadosPermitidos = [
-            'Esperando programación', 'En transito', 'Falla mecánica', 'En ruta para su entrega',
+            'Esperando programacin', 'En transito', 'Falla mecnica', 'En ruta para su entrega',
             'No se encuentra', 'Despachado', 'Retirado por el dist', 'Reprogramacion por no visita',
             'Sin visita', 'Despachado al int', '1 visita sin contacto'
         ];
@@ -127,7 +184,12 @@ async function procesarAlertas() {
         const m = (datePactada.getMonth() + 1).toString().padStart(2, '0');
         const pactadaSalida = `${d}/${m}/${datePactada.getFullYear()}`;
 
-        alertas.push({
+        const sucursalFinal = clasificarSucursal(sucursalTexto);
+        if (!alertasPorSucursal[sucursalFinal]) {
+            alertasPorSucursal[sucursalFinal] = [];
+        }
+
+        alertasPorSucursal[sucursalFinal].push({
             guia: tds[idxGuia],
             remito: tds[idxRemito],
             cliente: tds[idxCliente].substring(0, 30),
@@ -137,76 +199,6 @@ async function procesarAlertas() {
             categoria: categoria
         });
     }
-
-    // Separar y ordenar para priorizar lo de HOY
-    const criticos = alertas.filter(a => a.categoria === 'CRITICO').sort((a, b) => {
-        const [da, ma, ya] = a.fechaPactada.split('/').map(Number);
-        const [db, mb, yb] = b.fechaPactada.split('/').map(Number);
-        return new Date(yb, mb - 1, db) - new Date(ya, ma - 1, da); // Descendente
-    });
-    const advertencias = alertas.filter(a => a.categoria === 'ADVERTENCIA').sort((a, b) => {
-        const [da, ma, ya] = a.fechaPactada.split('/').map(Number);
-        const [db, mb, yb] = b.fechaPactada.split('/').map(Number);
-        return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db); // Ascendente
-    });
-    const proximos = alertas.filter(a => a.categoria === 'PROXIMO').sort((a, b) => {
-        const [da, ma, ya] = a.fechaPactada.split('/').map(Number);
-        const [db, mb, yb] = b.fechaPactada.split('/').map(Number);
-        return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db); // Ascendente
-    });
-
-    const hoyStr = `${hoy.getDate().toString().padStart(2, '0')}/${(hoy.getMonth()+1).toString().padStart(2, '0')}/${hoy.getFullYear()}`;
-    const hoyCount = criticos.filter(a => a.fechaPactada === hoyStr).length;
-
-    console.log(`Resumen Final - HOY (${hoyStr}): ${hoyCount}, CRITICOS TOTAL: ${criticos.length}, ADVERTENCIAS: ${advertencias.length}, PROXIMOS: ${proximos.length}`);
-
-    const nombresMeses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-    const nombreMesActual = nombresMeses[hoy.getMonth()];
-
-    let emailHtml = `
-      <div style="font-family:Arial,sans-serif;color:#333;max-width:800px;margin:0 auto">
-        <h2>Reporte Diario Presis - ${sectorTitle} (${new Date().toLocaleDateString()})</h2>
-        <p>Categorización de guías por Fecha Pactada (Mes de ${nombreMesActual} y pendientes del mes anterior):</p>
-    `;
-    
-    const renderTable = (lista, tituloHtml, color, limite = 30) => {
-        if (lista.length === 0) return '';
-        const items = lista.slice(0, limite);
-        let htmlSnippet = `
-          <div style="margin-top:20px;margin-bottom:5px;font-weight:bold;color:${color}">
-            ${tituloHtml} (Mostrando ${items.length} de ${lista.length})
-          </div>
-          <table style="width:100%;border-collapse:collapse;border:1px solid #000" border="1" cellspacing="0" cellpadding="5">
-            <tr style="background:#eee;font-size:12px">
-              <th style="border:1px solid #000">Guia</th>
-              <th style="border:1px solid #000">Remito</th>
-              <th style="border:1px solid #000">Cliente</th>
-              <th style="border:1px solid #000">Domicilio</th>
-              <th style="border:1px solid #000">Pactada</th>
-              <th style="border:1px solid #000">Estado</th>
-            </tr>
-        `;
-        
-        items.forEach(a => {
-            htmlSnippet += `
-              <tr style="font-size:11px">
-                <td style="border:1px solid #000">${a.guia}</td>
-                <td style="border:1px solid #000">${a.remito}</td>
-                <td style="border:1px solid #000">${a.cliente}</td>
-                <td style="border:1px solid #000">${a.domicilio}</td>
-                <td style="border:1px solid #000;text-align:center">${a.fechaPactada}</td>
-                <td style="border:1px solid #000">${a.estado}</td>
-              </tr>
-            `;
-        });
-        htmlSnippet += `</table>`;
-        return htmlSnippet;
-    };
-
-    emailHtml += renderTable(criticos, '🔴 CRÍTICO (HOY o VENCIDAS)', '#d32f2f');
-    emailHtml += renderTable(advertencias, '🟡 PRÓXIMAS 48 HORAS', '#f57f17');
-    emailHtml += renderTable(proximos, '🟢 PRÓXIMA SEMANA', '#388e3c');
-    emailHtml += `</div>`;
 
     const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -218,26 +210,102 @@ async function procesarAlertas() {
         }
     });
 
-    if (process.env.SMTP_USER) {
-        console.log("Enviando email...");
-        try {
-            const info = await transporter.sendMail({
-                from: `"Presis Bot" <${process.env.SMTP_USER}>`,
-                to: process.env.REPORT_EMAILS || 'destinatario@ejemplo.com',
-                subject: `Alerta Presis ${sectorTitle} - ${criticos.length} CRÍTICAS | ${advertencias.length} ADVERTENCIAS`,
-                html: emailHtml,
+    const nombresMeses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    const nombreMesActual = nombresMeses[hoy.getMonth()];
+
+    for (const [sucursal, alertasDeSucursal] of Object.entries(alertasPorSucursal)) {
+        const criticos = alertasDeSucursal.filter(a => a.categoria === 'CRITICO').sort((a, b) => {
+            const [da, ma, ya] = a.fechaPactada.split('/').map(Number);
+            const [db, mb, yb] = b.fechaPactada.split('/').map(Number);
+            return new Date(yb, mb - 1, db) - new Date(ya, ma - 1, da); 
+        });
+        const advertencias = alertasDeSucursal.filter(a => a.categoria === 'ADVERTENCIA').sort((a, b) => {
+            const [da, ma, ya] = a.fechaPactada.split('/').map(Number);
+            const [db, mb, yb] = b.fechaPactada.split('/').map(Number);
+            return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db); 
+        });
+        const proximos = alertasDeSucursal.filter(a => a.categoria === 'PROXIMO').sort((a, b) => {
+            const [da, ma, ya] = a.fechaPactada.split('/').map(Number);
+            const [db, mb, yb] = b.fechaPactada.split('/').map(Number);
+            return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db); 
+        });
+
+        // Solo enviar si hay alertas!
+        if (criticos.length === 0 && advertencias.length === 0) continue;
+
+        let emailHtml = `
+          <div style="font-family:Arial,sans-serif;color:#333;max-width:800px;margin:0 auto">
+            <h2>Reporte Diario Presis ${sectorTitle} - ${sucursal} (${new Date().toLocaleDateString()})</h2>
+            <p>Categorizacin de guas por Fecha Pactada (Mes de ${nombreMesActual} y pendientes del mes anterior):</p>
+        `;
+        
+        const renderTable = (lista, tituloHtml, color, limite = 30) => {
+            if (lista.length === 0) return '';
+            const items = lista.slice(0, limite);
+            let htmlSnippet = `
+              <div style="margin-top:20px;margin-bottom:5px;font-weight:bold;color:${color}">
+                ${tituloHtml} (Mostrando ${items.length} de ${lista.length})
+              </div>
+              <table style="width:100%;border-collapse:collapse;border:1px solid #000" border="1" cellspacing="0" cellpadding="5">
+                <tr style="background:#eee;font-size:12px">
+                  <th style="border:1px solid #000">Guia</th>
+                  <th style="border:1px solid #000">Remito</th>
+                  <th style="border:1px solid #000">Cliente</th>
+                  <th style="border:1px solid #000">Domicilio</th>
+                  <th style="border:1px solid #000">Pactada</th>
+                  <th style="border:1px solid #000">Estado</th>
+                </tr>
+            `;
+            
+            items.forEach(a => {
+                htmlSnippet += `
+                  <tr style="font-size:11px">
+                    <td style="border:1px solid #000">${a.guia}</td>
+                    <td style="border:1px solid #000">${a.remito}</td>
+                    <td style="border:1px solid #000">${a.cliente}</td>
+                    <td style="border:1px solid #000">${a.domicilio}</td>
+                    <td style="border:1px solid #000;text-align:center">${a.fechaPactada}</td>
+                    <td style="border:1px solid #000">${a.estado}</td>
+                  </tr>
+                `;
             });
-            console.log("Correo enviado:", info.messageId);
-        } catch(e) {
-            console.error("Error enviando correo:", e);
+            htmlSnippet += `</table>`;
+            return htmlSnippet;
+        };
+
+        emailHtml += renderTable(criticos, '?? CRTICO (HOY o VENCIDAS)', '#d32f2f');
+        emailHtml += renderTable(advertencias, '?? PRXIMAS 48 HORAS', '#f57f17');
+        emailHtml += renderTable(proximos, '?? PRXIMA SEMANA', '#388e3c');
+        emailHtml += `</div>`;
+
+        let destinos = [];
+        if (sectorParams === 'postal' && emailsPostal[sucursal]) {
+            destinos = emailsPostal[sucursal];
+        } else if (sectorParams === 'logistica' && emailsLogistica[sucursal]) {
+            destinos = emailsLogistica[sucursal];
         }
-    } else {
-        console.log("No se configuraron variables de entorno SMTP. Saltando envío.");
+
+        if (destinos.length === 0) {
+            console.log(`No hay correos configurados para ${sucursal} (${sectorTitle}). Saltando.`);
+            continue;
+        }
+
+        if (process.env.SMTP_USER) {
+            console.log(`Enviando email a ${sucursal} (${sectorTitle})...`);
+            try {
+                const info = await transporter.sendMail({
+                    from: `"Presis Bot" <${process.env.SMTP_USER}>`,
+                    to: destinos.join(', '),
+                    cc: process.env.REPORT_EMAILS || '',
+                    subject: `Alerta Presis ${sectorTitle} [${sucursal}] - ${criticos.length} CRTICAS | ${advertencias.length} ADVERTENCIAS`,
+                    html: emailHtml,
+                });
+                console.log(`Correo enviado a ${sucursal}:`, info.messageId);
+            } catch(e) {
+                console.error(`Error enviando correo a ${sucursal}:`, e);
+            }
+        }
     }
 }
 
 procesarAlertas().catch(console.error);
-
-
-
-
