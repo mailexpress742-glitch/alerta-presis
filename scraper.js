@@ -193,9 +193,25 @@ async function scrapePresis() {
 
           if (!response.ok()) throw new Error('HTTP ' + response.status() + ': ' + response.statusText());
 
+
           const buffer = await response.body();
+          try {
+              const json = JSON.parse(buffer.toString());
+              console.log("JSON Response from Epresis:", json);
+              if (json.job_id) {
+                  console.log("Going to Jobs Dashboard...");
+                  await page.goto('https://mexlv.epresis.com/admin/jobs/dashboard');
+                  await page.waitForTimeout(5000);
+                  const html = await page.content();
+                  require('fs').writeFileSync('jobs_dashboard_' + filename + '.html', html);
+                  console.log("Saved jobs dashboard HTML.");
+              }
+          } catch(e) {
+              console.log("Not JSON, saving as normal CSV...");
+          }
           const downloadPath = require('path').join(__dirname, filename);
           require('fs').writeFileSync(downloadPath, buffer);
+
           console.log(`CSV Guardado para ${sectorName}: ${buffer.length} bytes`);
       };
 
