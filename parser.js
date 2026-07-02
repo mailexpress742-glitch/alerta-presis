@@ -166,7 +166,8 @@ async function procesarAlertas() {
             alertasPorSucursal[sucLlave].push(tds);
         }
     }
-﻿const child_process = require('child_process');
+
+    ﻿const child_process = require('child_process');
 
 if (!process.env.HAS_RESTARTED) {
     console.log("Reiniciando el parser con 4GB de memoria limite para procesar el archivo gigante...");
@@ -476,4 +477,6 @@ async function procesarAlertas() {
     }
 }
 
+
+}
 procesarAlertas().catch(console.error);
