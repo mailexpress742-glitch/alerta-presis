@@ -200,34 +200,42 @@ async function scrapePresis() {
               const json = JSON.parse(buffer.toString());
               console.log("JSON Response from Epresis:", json);
               if (json.job_id) {
-                  let downloadUrl = null;
-                  for (let i = 0; i < 60; i++) {
-                      await page.goto('https://mexlv.epresis.com/admin/jobs/dashboard');
-                      // Esperar a que cargue la tabla
-                      await page.waitForTimeout(2000);
-                      const link = await page.evaluate((id) => {
-                          const rows = document.querySelectorAll('table tbody tr');
-                          for (const row of rows) {
-                              const cells = row.querySelectorAll('td');
-                              if (cells.length > 0 && cells[0].textContent.trim() == id) {
-                                  const links = row.querySelectorAll('a');
-                                  for (let a of links) {
-                                      if (a.href.includes('downloads3') || a.href.includes('.csv') || a.href.includes('.xlsx')) {
-                                          return a.href;
+                  
+                  let downloadUrl = json.url ? ('https://mexlv.epresis.com' + json.url) : null;
+                  
+                  if (!downloadUrl) {
+                      const dashboardPage = await context.newPage();
+                      for (let i = 0; i < 60; i++) {
+                          await dashboardPage.goto('https://mexlv.epresis.com/admin/jobs/dashboard');
+                          await dashboardPage.waitForTimeout(2000);
+                          const link = await dashboardPage.evaluate((id) => {
+                              const rows = document.querySelectorAll('table tbody tr');
+                              for (const row of rows) {
+                                  const cells = row.querySelectorAll('td');
+                                  if (cells.length > 0 && cells[0].textContent.trim() == id) {
+                                      const links = row.querySelectorAll('a');
+                                      for (let a of links) {
+                                          if (a.href.includes('downloads3') || a.href.includes('.csv') || a.href.includes('.xlsx')) {
+                                              return a.href;
+                                          }
                                       }
                                   }
                               }
+                              return null;
+                          }, json.job_id);
+                          
+                          if (link) {
+                              downloadUrl = link;
+                              break;
                           }
-                          return null;
-                      }, json.job_id);
-                      
-                      if (link) {
-                          downloadUrl = link;
-                          break;
+                          console.log("Esperando que termine el job " + json.job_id + "...");
+                          await dashboardPage.waitForTimeout(5000);
                       }
-                      console.log("Esperando que termine el job " + json.job_id + "...");
-                      await page.waitForTimeout(5000);
+                      await dashboardPage.close();
+                  } else {
+                      console.log("URL de descarga directa proporcionada en JSON.");
                   }
+
                   
                   if (downloadUrl) {
                       console.log("Descargando archivo desde: " + downloadUrl);
