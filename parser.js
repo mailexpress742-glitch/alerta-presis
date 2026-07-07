@@ -288,7 +288,7 @@ async function procesarAlertas() {
                 const info = await transporter.sendMail({
                     from: `"Presis Bot" <${process.env.SMTP_USER}>`,
                     to: destinos.join(', '),
-                    cc: process.env.REPORT_EMAILS || '',
+                    cc: (process.env.REPORT_EMAILS ? process.env.REPORT_EMAILS + ',' : '') + 'atencionalcliente@mailexpress.com.ar',
                     subject: `Alerta Presis ${sectorTitle} [${sucursal}] - ${criticos.length} CRITICAS | ${advertencias.length} ADVERTENCIAS`,
                     html: emailHtml,
                 });
@@ -301,3 +301,4 @@ async function procesarAlertas() {
 }
 
 procesarAlertas().catch(console.error);
+
