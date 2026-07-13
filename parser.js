@@ -47,7 +47,7 @@ const emailsPostal = {
 function clasificarSucursal(suc) {
     if (!suc) return 'Resto del pais';
     const s = suc.toUpperCase();
-    if (s.includes('MZA') || s.includes('MENDOZA') || s.includes('DORREGO')) return 'Mendoza';
+    if (s.includes('MZA') || s.includes('MENDOZA') || s.includes('DORREGO') || s.includes('ACCESO SUR') || s.includes('ALVEAR') || s.includes('MALARGUE')) return 'Mendoza';
     if (s.includes('CABA') || s.includes('BS AS') || s.includes('BUENOS AIRES') || s.includes('FERR')) return 'Bs As';
     if (s.includes('SAN JUAN') || s.includes('RAWSON')) return 'San Juan';
     if (s.includes('SAN RAFAEL')) return 'San Rafael';
@@ -123,7 +123,7 @@ async function procesarAlertas() {
             idxRemito = headers.indexOf('Remito');
             idxEstado = headers.indexOf('Estado');
             idxDomicilio = headers.indexOf('Domicilio');
-            idxSucursal = headers.indexOf('Sucursal');
+            idxSucursal = headers.indexOf('SUCURSAL DESTINO') !== -1 ? headers.indexOf('SUCURSAL DESTINO') : headers.indexOf('Sucursal');
             idxFechaPactada = headers.indexOf('Fecha Pactada') !== -1 ? headers.indexOf('Fecha Pactada') : headers.indexOf('Fecha Pactada ');
             idxFechaIngreso = headers.indexOf('Fecha');
             console.log(`Indices detectados - Guia: ${idxGuia}, Pactada: ${idxFechaPactada}, Estado: ${idxEstado}, Sucursal: ${idxSucursal}`);
