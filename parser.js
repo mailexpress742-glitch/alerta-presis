@@ -182,11 +182,23 @@ async function procesarAlertas() {
             alertasPorSucursal[sucursalFinal] = [];
         }
 
+        const cleanExcelString = (str) => {
+            if (!str) return '';
+            let cleaned = str.trim();
+            if (cleaned.startsWith('=')) {
+                cleaned = cleaned.substring(1);
+                if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+                    cleaned = cleaned.substring(1, cleaned.length - 1);
+                }
+            }
+            return cleaned;
+        };
+
         alertasPorSucursal[sucursalFinal].push({
-            guia: tds[idxGuia],
-            remito: tds[idxRemito],
-            cliente: tds[idxCliente] ? tds[idxCliente].substring(0, 30) : '',
-            domicilio: (idxDomicilio !== -1 && tds[idxDomicilio]) ? tds[idxDomicilio].substring(0, 40) : '',
+            guia: cleanExcelString(tds[idxGuia]),
+            remito: cleanExcelString(tds[idxRemito]),
+            cliente: tds[idxCliente] ? cleanExcelString(tds[idxCliente]).substring(0, 30) : '',
+            domicilio: (idxDomicilio !== -1 && tds[idxDomicilio]) ? cleanExcelString(tds[idxDomicilio]).substring(0, 40) : '',
             estado: estado.replace(/^\d+-/, '').substring(0, 30),
             fechaPactada: pactadaSalida,
             categoria: categoria
