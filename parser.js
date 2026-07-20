@@ -106,7 +106,7 @@ async function procesarAlertas() {
     let count = 0;
     
     let headers = [];
-    let idxGuia, idxCliente, idxRemito, idxEstado, idxDomicilio, idxSucursal, idxFechaPactada, idxFechaIngreso;
+    let idxGuia, idxCliente, idxRemito, idxEstado, idxDomicilio, idxSucursal, idxFechaPactada, idxFechaIngreso, idxServicio;
     
     const fileStream = fs.createReadStream(filename);
     const rl = readline.createInterface({ input: fileStream, crlfDelay: Infinity });
@@ -123,6 +123,7 @@ async function procesarAlertas() {
             idxRemito = headers.indexOf('Remito');
             idxEstado = headers.indexOf('Estado');
             idxDomicilio = headers.indexOf('Domicilio');
+            idxServicio = headers.indexOf('Servicio');
             idxSucursal = headers.indexOf('SUCURSAL DESTINO') !== -1 ? headers.indexOf('SUCURSAL DESTINO') : headers.indexOf('Sucursal');
             idxFechaPactada = headers.indexOf('Fecha Pactada') !== -1 ? headers.indexOf('Fecha Pactada') : headers.indexOf('Fecha Pactada ');
             idxFechaIngreso = headers.indexOf('Fecha');
@@ -138,8 +139,19 @@ async function procesarAlertas() {
         const fechaIngresoStr = tds[idxFechaIngreso];
         const estado = tds[idxEstado];
         const sucursalTexto = idxSucursal !== -1 ? tds[idxSucursal] : '';
+        const servicioTexto = idxServicio !== -1 ? tds[idxServicio] : '';
         
         if (!fechaPactadaStr || !fechaIngresoStr) continue;
+
+        const normServ = (str) => str.toUpperCase().replace(/[^A-Z]/g, '');
+        const normS = normServ(servicioTexto);
+        const servValidosLog = ['REFRIGERADOCONENTREGA', 'ECOMMERCE'];
+        const servValidosPos = ['TARJETA', 'GPSPLUS', 'CARTADOCUMENTO'];
+        
+        const isValido = (sectorParams === 'logistica' && servValidosLog.some(v => normS.includes(v))) ||
+                         (sectorParams === 'postal' && servValidosPos.some(v => normS.includes(v)));
+                         
+        if (!isValido) continue;
 
         const estadosPermitidos = [
             'Esperando programacion', 'Esperando programación', 'En transito', 'Falla mecanica', 'Falla mecánica', 
@@ -198,6 +210,7 @@ async function procesarAlertas() {
             guia: cleanExcelString(tds[idxGuia]),
             remito: cleanExcelString(tds[idxRemito]),
             cliente: tds[idxCliente] ? cleanExcelString(tds[idxCliente]).substring(0, 30) : '',
+            servicio: cleanExcelString(servicioTexto).substring(0, 30),
             domicilio: (idxDomicilio !== -1 && tds[idxDomicilio]) ? cleanExcelString(tds[idxDomicilio]).substring(0, 40) : '',
             estado: estado.replace(/^\d+-/, '').substring(0, 30),
             fechaPactada: pactadaSalida,
@@ -255,6 +268,7 @@ async function procesarAlertas() {
                   <th style="border:1px solid #000">Guia</th>
                   <th style="border:1px solid #000">Remito</th>
                   <th style="border:1px solid #000">Cliente</th>
+                  <th style="border:1px solid #000">Servicio</th>
                   <th style="border:1px solid #000">Domicilio</th>
                   <th style="border:1px solid #000">Pactada</th>
                   <th style="border:1px solid #000">Estado</th>
@@ -267,6 +281,7 @@ async function procesarAlertas() {
                     <td style="border:1px solid #000">${a.guia}</td>
                     <td style="border:1px solid #000">${a.remito}</td>
                     <td style="border:1px solid #000">${a.cliente}</td>
+                    <td style="border:1px solid #000">${a.servicio}</td>
                     <td style="border:1px solid #000">${a.domicilio}</td>
                     <td style="border:1px solid #000;text-align:center">${a.fechaPactada}</td>
                     <td style="border:1px solid #000">${a.estado}</td>
