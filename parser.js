@@ -145,7 +145,7 @@ async function procesarAlertas() {
 
         const normServ = (str) => str.toUpperCase().replace(/[^A-Z]/g, '');
         const normS = normServ(servicioTexto);
-        const servValidosLog = ['REFRIGERADO', 'ECOMMERCE'];
+        const servValidosLog = ['REFRIGERADO', 'ECOMMERCE', 'CADENADEFRIO', 'FRIO'];
         const servValidosPos = ['TARJETA', 'GPSPLUS', 'CARTADOCUMENTO'];
         
         const isValido = (sectorParams === 'logistica' && servValidosLog.some(v => normS.includes(v))) ||
