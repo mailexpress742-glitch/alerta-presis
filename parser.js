@@ -148,7 +148,7 @@ async function procesarAlertas() {
         const servValidosLog = ['REFRIGERADO', 'ECOMMERCE', 'CADENADEFRIO', 'FRIO'];
         const servValidosPos = ['TARJETA', 'GPSPLUS', 'CARTADOCUMENTO'];
         
-        const isValido = (sectorParams === 'logistica') ||
+        const isValido = (sectorParams === 'logistica' && servValidosLog.some(v => normS.includes(v))) ||
                          (sectorParams === 'postal' && servValidosPos.some(v => normS.includes(v)));
                          
         if (!isValido) continue;
